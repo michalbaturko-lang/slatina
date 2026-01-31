@@ -15,6 +15,26 @@ export interface DemoVideo {
   status: 'uploading' | 'processing' | 'ready';
   uploadProgress: number;
   aiEvents: AIEvent[];
+  screenshots: Screenshot[];
+  audioComments: AudioComment[];
+  createdAt: number;
+}
+
+export interface Screenshot {
+  id: string;
+  time: number;
+  dataUrl: string;
+  note?: string;
+  playerIds?: string[];
+  createdAt: number;
+}
+
+export interface AudioComment {
+  id: string;
+  time: number;
+  duration: number;
+  blobUrl?: string;
+  playerIds?: string[];
   createdAt: number;
 }
 
@@ -109,12 +129,14 @@ export function saveVideos(videos: DemoVideo[]): void {
   localStorage.setItem(VIDEOS_KEY, JSON.stringify(videos));
 }
 
-export function addVideo(video: Omit<DemoVideo, 'id' | 'createdAt' | 'aiEvents'>): DemoVideo {
+export function addVideo(video: Omit<DemoVideo, 'id' | 'createdAt' | 'aiEvents' | 'screenshots' | 'audioComments'>): DemoVideo {
   const newVideo: DemoVideo = {
     ...video,
     id: `video-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     createdAt: Date.now(),
     aiEvents: [],
+    screenshots: [],
+    audioComments: [],
   };
 
   const videos = getVideos();
@@ -146,6 +168,58 @@ export function deleteVideo(id: string): void {
   const filtered = videos.filter(v => v.id !== id);
   saveVideos(filtered);
   deleteVideoBlob(id).catch(console.error);
+}
+
+// Screenshot management
+export function addScreenshot(videoId: string, screenshot: Omit<Screenshot, 'id' | 'createdAt'>): Screenshot | null {
+  const video = getVideo(videoId);
+  if (!video) return null;
+
+  const newScreenshot: Screenshot = {
+    ...screenshot,
+    id: `screenshot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: Date.now(),
+  };
+
+  const screenshots = video.screenshots || [];
+  screenshots.push(newScreenshot);
+  updateVideo(videoId, { screenshots });
+
+  return newScreenshot;
+}
+
+export function deleteScreenshot(videoId: string, screenshotId: string): void {
+  const video = getVideo(videoId);
+  if (!video) return;
+
+  const screenshots = (video.screenshots || []).filter(s => s.id !== screenshotId);
+  updateVideo(videoId, { screenshots });
+}
+
+// Audio comment management
+export function addAudioComment(videoId: string, audioComment: Omit<AudioComment, 'id' | 'createdAt'>): AudioComment | null {
+  const video = getVideo(videoId);
+  if (!video) return null;
+
+  const newAudioComment: AudioComment = {
+    ...audioComment,
+    id: `audio-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: Date.now(),
+  };
+
+  const audioComments = video.audioComments || [];
+  audioComments.push(newAudioComment);
+  updateVideo(videoId, { audioComments });
+
+  return newAudioComment;
+}
+
+export function deleteAudioComment(videoId: string, audioId: string): void {
+  const video = getVideo(videoId);
+  if (!video) return;
+
+  const audioComments = (video.audioComments || []).filter(a => a.id !== audioId);
+  updateVideo(videoId, { audioComments });
 }
 
 // Rozšířené typy událostí pro mládežnický fotbal
