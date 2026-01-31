@@ -1,0 +1,76 @@
+# =============================================================================
+# Slatina - Demo Docker Compose
+# =============================================================================
+# Minimální konfigurace pro lokální testování bez AWS
+# Použití: docker-compose -f docker-compose.demo.yml up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: slatina-db
+    environment:
+      POSTGRES_USER: slatina
+      POSTGRES_PASSWORD: slatina123
+      POSTGRES_DB: slatina
+    ports:
+      - "5432:5432"
+    volumes:
+      - slatina_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slatina"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: slatina-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - slatina_redis:/data
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: slatina-storage
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    volumes:
+      - slatina_minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Create buckets automatically
+  minio-setup:
+    image: minio/mc:latest
+    container_name: slatina-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/slatina-videos;
+      mc anonymous set download local/slatina-videos;
+      echo 'Buckets created successfully!';
+      exit 0;
+      "
+
+volumes:
+  slatina_postgres:
+  slatina_redis:
+  slatina_minio:
