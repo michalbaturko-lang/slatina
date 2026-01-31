@@ -490,8 +490,8 @@ const ALL_EVENT_TYPES: EventType[] = [
   },
 ];
 
-  // Filtruj události podle věkové kategorie (default U15 pro SK Slatina 2007)
-  const ageGroup = 'U15'; // TODO: načíst z team config
+  // Filtruj události podle věkové kategorie (default U9 pro SK Slatina 2017)
+  const ageGroup = 'U9'; // SK Slatina ročník 2017
   const relevantEvents = ALL_EVENT_TYPES.filter(e => e.ageGroups.includes(ageGroup));
 
   // Pro krátká videa (< 30s) - vygeneruj 2-4 eventy

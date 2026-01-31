@@ -14,12 +14,21 @@ export interface TeamConfig {
   updatedAt: number;
 }
 
+export interface Player {
+  id: string;
+  name: string;
+  number?: number;
+  position?: string;
+  active: boolean;
+}
+
 export interface CoachComment {
   id: string;
   videoId: string;
   time: number;
   text: string;
   category: 'praise' | 'improvement' | 'tactic' | 'note';
+  playerIds: string[]; // Hráči, kterých se komentář týká
   createdAt: number;
 }
 
@@ -36,16 +45,17 @@ export interface AIFeedback {
 const TEAM_KEY = 'slatina-team';
 const COMMENTS_KEY = 'slatina-comments';
 const FEEDBACK_KEY = 'slatina-feedback';
+const PLAYERS_KEY = 'slatina-players';
 
-// Default team configuration - SK Slatina 2007
+// Default team configuration - SK Slatina 2017
 const DEFAULT_TEAM: TeamConfig = {
   id: 'default',
-  name: 'SK Slatina 2007',
-  jerseyColor: '#22c55e', // zelená
-  secondaryColor: '#ffffff',
-  ageGroup: 'U15', // ročník 2007 = U15 v roce 2022, U18 v 2025
-  formation: '4-3-3',
-  focusAreas: ['pressing', 'transition', 'marking', 'combination'],
+  name: 'SK Slatina 2017',
+  jerseyColor: '#ffffff', // bílá
+  secondaryColor: '#22c55e', // zelená
+  ageGroup: 'U9', // ročník 2017 = U9 v roce 2026
+  formation: '3-1',
+  focusAreas: ['square_basics', 'offer_basics', 'small_games'],
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
@@ -55,6 +65,20 @@ export const COACHES = [
   { id: 'ales', name: 'Aleš', role: 'Hlavní trenér' },
   { id: 'jirka', name: 'Jirka', role: 'Asistent' },
   { id: 'david', name: 'David', role: 'Asistent' },
+];
+
+// Vzorový seznam hráčů (uživatel si může upravit)
+const DEFAULT_PLAYERS: Player[] = [
+  { id: 'p1', name: 'Adam', number: 1, position: 'Brankář', active: true },
+  { id: 'p2', name: 'Bára', number: 2, position: 'Obránce', active: true },
+  { id: 'p3', name: 'Cyril', number: 3, position: 'Obránce', active: true },
+  { id: 'p4', name: 'David', number: 4, position: 'Záložník', active: true },
+  { id: 'p5', name: 'Ema', number: 5, position: 'Záložník', active: true },
+  { id: 'p6', name: 'Filip', number: 6, position: 'Útočník', active: true },
+  { id: 'p7', name: 'Gábina', number: 7, position: 'Útočník', active: true },
+  { id: 'p8', name: 'Honza', number: 8, position: 'Záložník', active: true },
+  { id: 'p9', name: 'Iveta', number: 9, position: 'Útočník', active: true },
+  { id: 'p10', name: 'Jakub', number: 10, position: 'Záložník', active: true },
 ];
 
 // Team configuration
@@ -167,3 +191,73 @@ export const FORMATIONS: Record<string, string[]> = {
   'U14': ['4-3-3', '4-4-2', '3-5-2'],
   'U15': ['4-3-3', '4-4-2', '3-5-2', '4-2-3-1'],
 };
+
+// === PLAYER MANAGEMENT ===
+
+export function getPlayers(): Player[] {
+  if (typeof window === 'undefined') return DEFAULT_PLAYERS;
+  const data = localStorage.getItem(PLAYERS_KEY);
+  return data ? JSON.parse(data) : DEFAULT_PLAYERS;
+}
+
+export function savePlayers(players: Player[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(players));
+  }
+}
+
+export function addPlayer(player: Omit<Player, 'id'>): Player {
+  const newPlayer: Player = {
+    ...player,
+    id: `player-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  };
+  const players = getPlayers();
+  players.push(newPlayer);
+  savePlayers(players);
+  return newPlayer;
+}
+
+export function updatePlayer(id: string, updates: Partial<Player>): Player | null {
+  const players = getPlayers();
+  const index = players.findIndex(p => p.id === id);
+  if (index === -1) return null;
+  players[index] = { ...players[index], ...updates };
+  savePlayers(players);
+  return players[index];
+}
+
+export function deletePlayer(id: string): void {
+  const players = getPlayers().filter(p => p.id !== id);
+  savePlayers(players);
+}
+
+export function getPlayerById(id: string): Player | undefined {
+  return getPlayers().find(p => p.id === id);
+}
+
+export function getPlayersByIds(ids: string[]): Player[] {
+  const players = getPlayers();
+  return ids.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
+}
+
+export function searchPlayers(query: string): Player[] {
+  const players = getPlayers().filter(p => p.active);
+  if (!query.trim()) return players;
+  const lowerQuery = query.toLowerCase();
+  return players.filter(p =>
+    p.name.toLowerCase().includes(lowerQuery) ||
+    (p.number && p.number.toString().includes(query))
+  );
+}
+
+// Get comments for a specific player across all videos
+export function getCommentsForPlayer(playerId: string): CoachComment[] {
+  const comments = getComments();
+  return comments.filter(c => c.playerIds?.includes(playerId));
+}
+
+// Get all videos that have comments about a specific player
+export function getVideoIdsForPlayer(playerId: string): string[] {
+  const comments = getCommentsForPlayer(playerId);
+  return [...new Set(comments.map(c => c.videoId))];
+}

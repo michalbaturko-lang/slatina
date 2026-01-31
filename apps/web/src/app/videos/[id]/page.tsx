@@ -36,7 +36,11 @@ import {
   addComment,
   deleteComment,
   addFeedback,
+  getPlayers,
+  searchPlayers,
+  getPlayersByIds,
   CoachComment,
+  Player,
 } from '@/lib/team-store';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'text' | 'playerX' | 'playerO';
@@ -305,6 +309,12 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [newComment, setNewComment] = useState('');
   const [showComments, setShowComments] = useState(false);
 
+  // Player tagging for comments
+  const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+  const [playerSearch, setPlayerSearch] = useState('');
+  const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+  const [playerFilter, setPlayerFilter] = useState<string | null>(null);
+
   // Feedback for wrong AI detections
   const [feedbackEventId, setFeedbackEventId] = useState<string | null>(null);
   const [feedbackComment, setFeedbackComment] = useState('');
@@ -480,16 +490,35 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       time: currentTime,
       text: newComment.trim(),
       category: 'note',
+      playerIds: selectedPlayers.map(p => p.id),
     });
 
     setComments(prev => [...prev, comment]);
     setNewComment('');
-  }, [newComment, video, currentTime]);
+    setSelectedPlayers([]);
+    setPlayerSearch('');
+  }, [newComment, video, currentTime, selectedPlayers]);
 
   const handleDeleteComment = useCallback((id: string) => {
     deleteComment(id);
     setComments(prev => prev.filter(c => c.id !== id));
   }, []);
+
+  const addPlayerTag = useCallback((player: Player) => {
+    if (!selectedPlayers.find(p => p.id === player.id)) {
+      setSelectedPlayers(prev => [...prev, player]);
+    }
+    setPlayerSearch('');
+    setShowPlayerDropdown(false);
+  }, [selectedPlayers]);
+
+  const removePlayerTag = useCallback((playerId: string) => {
+    setSelectedPlayers(prev => prev.filter(p => p.id !== playerId));
+  }, []);
+
+  const filteredComments = playerFilter
+    ? comments.filter(c => c.playerIds?.includes(playerFilter))
+    : comments;
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -822,45 +851,185 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             {/* Comments Tab */}
             {showComments && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                {/* Player Filter */}
+                {comments.length > 0 && (
+                  <div style={{ padding: '8px 12px', borderBottom: '1px solid #1f2937' }}>
+                    <select
+                      value={playerFilter || ''}
+                      onChange={e => setPlayerFilter(e.target.value || null)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#1f2937',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '6px 10px',
+                        color: 'white',
+                        fontSize: 12,
+                      }}
+                    >
+                      <option value="">Všichni hráči</option>
+                      {getPlayers().filter(p => p.active).map(player => (
+                        <option key={player.id} value={player.id}>
+                          {player.number ? `#${player.number} ` : ''}{player.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-                  {comments.length === 0 ? (
+                  {filteredComments.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 24 }}>
-                      Zatím žádné komentáře.<br />
+                      {playerFilter ? 'Žádné komentáře pro tohoto hráče.' : 'Zatím žádné komentáře.'}<br />
                       <span style={{ fontSize: 12 }}>Přidejte komentář k aktuálnímu času videa.</span>
                     </p>
                   ) : (
-                    comments.sort((a, b) => a.time - b.time).map(comment => (
+                    filteredComments.sort((a, b) => a.time - b.time).map(comment => (
                       <div
                         key={comment.id}
                         style={{ ...styles.aiEvent, position: 'relative' }}
                         onClick={() => seek(comment.time)}
                       >
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
-                          {formatTime(comment.time)}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                            {formatTime(comment.time)}
+                          </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#6b7280',
+                              cursor: 'pointer',
+                              padding: 2,
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
                         </div>
-                        <p style={{ fontSize: 13 }}>{comment.text}</p>
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                          style={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#6b7280',
-                            cursor: 'pointer',
-                            padding: 4,
-                          }}
-                        >
-                          <X size={14} />
-                        </button>
+                        <p style={{ fontSize: 13, marginBottom: comment.playerIds?.length ? 6 : 0 }}>{comment.text}</p>
+                        {comment.playerIds?.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {getPlayersByIds(comment.playerIds).map(player => (
+                              <span
+                                key={player.id}
+                                style={{
+                                  fontSize: 10,
+                                  padding: '2px 6px',
+                                  borderRadius: 10,
+                                  backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                                  color: '#60a5fa',
+                                }}
+                              >
+                                {player.number ? `#${player.number} ` : ''}{player.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
                 </div>
 
-                {/* Add comment */}
+                {/* Add comment with player tagging */}
                 <div style={{ padding: 12, borderTop: '1px solid #1f2937' }}>
+                  {/* Selected players */}
+                  {selectedPlayers.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                      {selectedPlayers.map(player => (
+                        <span
+                          key={player.id}
+                          style={{
+                            fontSize: 11,
+                            padding: '3px 8px',
+                            borderRadius: 12,
+                            backgroundColor: 'rgba(59, 130, 246, 0.3)',
+                            color: '#60a5fa',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          {player.number ? `#${player.number} ` : ''}{player.name}
+                          <button
+                            onClick={() => removePlayerTag(player.id)}
+                            style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0, display: 'flex' }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Player search */}
+                  <div style={{ position: 'relative', marginBottom: 8 }}>
+                    <input
+                      type="text"
+                      value={playerSearch}
+                      onChange={e => {
+                        setPlayerSearch(e.target.value);
+                        setShowPlayerDropdown(true);
+                      }}
+                      onFocus={() => setShowPlayerDropdown(true)}
+                      placeholder="@ Označit hráče..."
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#1f2937',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '6px 10px',
+                        color: 'white',
+                        fontSize: 12,
+                      }}
+                    />
+                    {showPlayerDropdown && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: '#1f2937',
+                        borderRadius: 6,
+                        marginBottom: 4,
+                        maxHeight: 150,
+                        overflow: 'auto',
+                        boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                      }}>
+                        {searchPlayers(playerSearch)
+                          .filter(p => !selectedPlayers.find(sp => sp.id === p.id))
+                          .slice(0, 6)
+                          .map(player => (
+                            <button
+                              key={player.id}
+                              onClick={() => addPlayerTag(player)}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                color: 'white',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                              }}
+                              onMouseOver={e => (e.currentTarget.style.backgroundColor = '#374151')}
+                              onMouseOut={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                            >
+                              {player.number ? `#${player.number} ` : ''}{player.name}
+                              {player.position && <span style={{ color: '#6b7280', marginLeft: 8 }}>{player.position}</span>}
+                            </button>
+                          ))}
+                        {searchPlayers(playerSearch).filter(p => !selectedPlayers.find(sp => sp.id === p.id)).length === 0 && (
+                          <div style={{ padding: '8px 12px', color: '#6b7280', fontSize: 12 }}>
+                            Žádný hráč nenalezen
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Comment input */}
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input
                       type="text"
@@ -877,6 +1046,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                         fontSize: 13,
                       }}
                       onKeyDown={e => e.key === 'Enter' && handleAddComment()}
+                      onFocus={() => setShowPlayerDropdown(false)}
                     />
                     <button
                       onClick={handleAddComment}
