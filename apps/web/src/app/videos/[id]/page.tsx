@@ -22,13 +22,9 @@ import {
   MousePointer,
   Loader2,
   AlertCircle,
-  MessageSquare,
   Send,
-  Shield,
   Users,
-  Image as ImageIcon,
-  ChevronLeft,
-  ChevronRight,
+  PlayCircle,
 } from 'lucide-react';
 import {
   getVideo,
@@ -37,8 +33,10 @@ import {
   addScreenshot,
   deleteScreenshot,
   addAudioComment,
+  deleteAudioComment,
   DemoVideo,
   Screenshot,
+  AudioComment,
 } from '@/lib/demo-store';
 import {
   getTeam,
@@ -79,13 +77,11 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
 
   const [selectedTool, setSelectedTool] = useState<ToolType>('select');
@@ -99,34 +95,30 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [showPlayerSelect, setShowPlayerSelect] = useState(false);
   const [markerPosition, setMarkerPosition] = useState<Point | null>(null);
 
-  // Audio recording
+  // Audio recording with transcription
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [transcription, setTranscription] = useState('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<any>(null);
 
-  // Screenshots
+  // Screenshots and audio comments
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
-  const [showScreenshots, setShowScreenshots] = useState(false);
+  const [audioComments, setAudioComments] = useState<AudioComment[]>([]);
 
-  // Comments
+  // Text comments
   const [comments, setComments] = useState<CoachComment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [showComments, setShowComments] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
 
-  // Mobile panel
-  const [showPanel, setShowPanel] = useState(false);
-
   const team = typeof window !== 'undefined' ? getTeam() : null;
-
-  // Determine if drawing mode is active (not select mode)
   const isDrawingMode = selectedTool !== 'select';
 
-  // Lock/unlock body scroll when drawing mode changes
+  // Lock body scroll when drawing
   useEffect(() => {
     if (isDrawingMode) {
       document.body.style.overflow = 'hidden';
@@ -152,6 +144,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         }
         setVideo(videoData);
         setScreenshots(videoData.screenshots || []);
+        setAudioComments(videoData.audioComments || []);
         setComments(getComments(params.id));
         const blob = await getVideoBlob(params.id);
         if (blob) {
@@ -189,7 +182,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-
     let clientX, clientY;
     if ('touches' in e) {
       clientX = e.touches[0].clientX;
@@ -198,7 +190,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       clientX = e.clientX;
       clientY = e.clientY;
     }
-
     return {
       x: (clientX - rect.left) / rect.width,
       y: (clientY - rect.top) / rect.height
@@ -207,18 +198,13 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (selectedTool === 'select') return;
-
-    // Prevent default to stop scrolling when drawing
     e.preventDefault();
-
     const point = getCanvasPoint(e);
-
     if (selectedTool === 'playerMarker') {
       setMarkerPosition(point);
       setShowPlayerSelect(true);
       return;
     }
-
     setIsDrawing(true);
     setCurrentPoints([point]);
   }, [selectedTool, getCanvasPoint]);
@@ -269,30 +255,22 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     const visible = annotations.filter(a => currentTime >= a.startTime && currentTime <= a.endTime);
     for (const ann of visible) drawAnnotation(ctx, ann, canvas.width, canvas.height);
-
     if (isDrawing && currentPoints.length > 0) {
       drawAnnotation(ctx, {
-        id: 'current',
-        type: selectedTool,
-        points: currentPoints,
-        color: selectedColor,
-        strokeWidth,
-        startTime: 0,
-        endTime: 0
+        id: 'current', type: selectedTool, points: currentPoints,
+        color: selectedColor, strokeWidth, startTime: 0, endTime: 0
       }, canvas.width, canvas.height);
     }
   }, [annotations, currentTime, isDrawing, currentPoints, selectedTool, selectedColor, strokeWidth]);
 
-  // Audio Recording
+  // Audio Recording with Speech Recognition
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
       mediaRecorderRef.current?.stop();
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-      }
+      recognitionRef.current?.stop();
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
       setIsRecording(false);
     } else {
       try {
@@ -300,92 +278,142 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         const recorder = new MediaRecorder(stream);
         mediaRecorderRef.current = recorder;
         audioChunksRef.current = [];
-
         const startTime = currentTime;
+        let finalTranscript = '';
 
-        recorder.ondataavailable = (e) => {
-          audioChunksRef.current.push(e.data);
-        };
+        // Start speech recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+          const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+          const recognition = new SpeechRecognition();
+          recognition.lang = 'cs-CZ';
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.onresult = (event: any) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript + ' ';
+              } else {
+                interim += event.results[i][0].transcript;
+              }
+            }
+            setTranscription(finalTranscript + interim);
+          };
+          recognition.start();
+          recognitionRef.current = recognition;
+        }
 
+        recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
         recorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           const audioUrl = URL.createObjectURL(audioBlob);
-
+          const currentTranscript = transcription.trim() || finalTranscript.trim();
           if (video) {
-            addAudioComment(video.id, {
+            const newAudio = addAudioComment(video.id, {
               time: startTime,
               duration: recordingTime,
               blobUrl: audioUrl,
             });
+            if (newAudio) {
+              // Store transcript in the audio comment
+              const audioWithTranscript = { ...newAudio, transcript: currentTranscript };
+              setAudioComments(prev => [...prev, audioWithTranscript as any]);
+              // Update video storage with transcript
+              const updatedVideo = getVideo(video.id);
+              if (updatedVideo) {
+                const updatedAudioComments = updatedVideo.audioComments.map(a =>
+                  a.id === newAudio.id ? { ...a, transcript: currentTranscript } : a
+                );
+                updateVideo(video.id, { audioComments: updatedAudioComments } as any);
+              }
+            }
           }
-
           stream.getTracks().forEach(track => track.stop());
           setRecordingTime(0);
+          setTranscription('');
         };
 
         recorder.start();
         setIsRecording(true);
-
-        recordingIntervalRef.current = setInterval(() => {
-          setRecordingTime(t => t + 1);
-        }, 1000);
+        recordingIntervalRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
       } catch (err) {
-        console.error('Failed to start recording:', err);
+        console.error('Recording failed:', err);
         alert('Nelze spustit nahrávání. Povolte přístup k mikrofonu.');
       }
     }
-  }, [isRecording, currentTime, recordingTime, video]);
+  }, [isRecording, currentTime, recordingTime, video, transcription]);
 
   // Screenshot
   const captureScreenshot = useCallback(() => {
     const videoEl = videoRef.current;
     const annotationCanvas = canvasRef.current;
-    if (!videoEl || !annotationCanvas || !video) return;
+    if (!videoEl || !video) {
+      console.error('Video element or video data not available');
+      return;
+    }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = videoEl.videoWidth || 1280;
-    canvas.height = videoEl.videoHeight || 720;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(videoEl, 0, 0);
-    ctx.drawImage(annotationCanvas, 0, 0, canvas.width, canvas.height);
-
-    const dataUrl = canvas.toDataURL('image/png');
-
-    const newScreenshot = addScreenshot(video.id, {
-      time: currentTime,
-      dataUrl,
-    });
-
-    if (newScreenshot) {
-      setScreenshots(prev => [...prev, newScreenshot]);
-
-      // Set first screenshot as thumbnail
-      if (!video.thumbnail) {
-        updateVideo(video.id, { thumbnail: dataUrl });
+    try {
+      // Create canvas with video dimensions
+      const canvas = document.createElement('canvas');
+      const width = videoEl.videoWidth || 1280;
+      const height = videoEl.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('Could not get canvas context');
+        return;
       }
+
+      // Draw video frame
+      ctx.drawImage(videoEl, 0, 0, width, height);
+
+      // Draw annotations if canvas exists
+      if (annotationCanvas) {
+        ctx.drawImage(annotationCanvas, 0, 0, width, height);
+      }
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      const newScreenshot = addScreenshot(video.id, { time: currentTime, dataUrl });
+
+      if (newScreenshot) {
+        setScreenshots(prev => [...prev, newScreenshot]);
+        // Set as thumbnail if first screenshot
+        if (!video.thumbnail) {
+          updateVideo(video.id, { thumbnail: dataUrl });
+          setVideo(prev => prev ? { ...prev, thumbnail: dataUrl } : null);
+        }
+        // Visual feedback
+        alert('Screenshot uložen!');
+      }
+    } catch (err) {
+      console.error('Screenshot failed:', err);
+      alert('Nepodařilo se vytvořit screenshot');
     }
   }, [video, currentTime]);
 
-  const handleDeleteScreenshot = useCallback((screenshotId: string) => {
+  const handleDeleteScreenshot = useCallback((id: string) => {
     if (!video) return;
-    deleteScreenshot(video.id, screenshotId);
-    setScreenshots(prev => prev.filter(s => s.id !== screenshotId));
+    deleteScreenshot(video.id, id);
+    setScreenshots(prev => prev.filter(s => s.id !== id));
+  }, [video]);
+
+  const handleDeleteAudio = useCallback((id: string) => {
+    if (!video) return;
+    deleteAudioComment(video.id, id);
+    setAudioComments(prev => prev.filter(a => a.id !== id));
   }, [video]);
 
   // Comments
   const handleAddComment = useCallback(() => {
     if (!newComment.trim() || !video) return;
     const comment = addComment({
-      videoId: video.id,
-      time: currentTime,
-      text: newComment.trim(),
-      category: 'note',
-      playerIds: selectedPlayers.map(p => p.id),
+      videoId: video.id, time: currentTime, text: newComment.trim(),
+      category: 'note', playerIds: selectedPlayers.map(p => p.id),
     });
     setComments(prev => [...prev, comment]);
     setNewComment('');
     setSelectedPlayers([]);
-    setPlayerSearch('');
   }, [newComment, video, currentTime, selectedPlayers]);
 
   const handleDeleteComment = useCallback((id: string) => {
@@ -400,10 +428,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     setPlayerSearch('');
     setShowPlayerDropdown(false);
   }, [selectedPlayers]);
-
-  const removePlayerTag = useCallback((playerId: string) => {
-    setSelectedPlayers(prev => prev.filter(p => p.id !== playerId));
-  }, []);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -423,30 +447,23 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#030712', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <AlertCircle style={{ width: 48, height: 48, color: '#ef4444' }} />
-        <p style={{ fontSize: 18 }}>{error || 'Video nebylo nalezeno'}</p>
-        <Link href="/videos" style={{ color: '#3b82f6' }}>Zpět na seznam videí</Link>
+        <p>{error || 'Video nebylo nalezeno'}</p>
+        <Link href="/videos" style={{ color: '#3b82f6' }}>Zpět na seznam</Link>
       </div>
     );
   }
 
   const scoreDisplay = video.scoreHome !== undefined && video.scoreAway !== undefined
-    ? `${video.scoreHome}:${video.scoreAway}`
-    : null;
+    ? `${video.scoreHome}:${video.scoreAway}` : null;
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        minHeight: '100vh',
-        maxHeight: '100vh',
-        backgroundColor: '#030712',
-        color: 'white',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: isDrawingMode ? 'hidden' : 'auto',
-        touchAction: isDrawingMode ? 'none' : 'auto',
-      }}
-    >
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#030712',
+      color: 'white',
+      overflow: isDrawingMode ? 'hidden' : 'auto',
+      touchAction: isDrawingMode ? 'none' : 'auto',
+    }}>
       {/* Header */}
       <header style={{
         borderBottom: '1px solid #1f2937',
@@ -455,581 +472,483 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         position: 'sticky',
         top: 0,
         zIndex: 50,
-        flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-            <Link href="/videos" style={{ padding: 8, color: 'white', flexShrink: 0 }}>
-              <ArrowLeft size={20} />
-            </Link>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{video.title}</h1>
-              <p style={{ fontSize: 11, color: '#9ca3af' }}>
-                {new Date(video.date).toLocaleDateString('cs-CZ')}
-                {video.opponent && ` • vs. ${video.opponent}`}
-                {scoreDisplay && ` (${scoreDisplay})`}
-              </p>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Link href="/videos" style={{ padding: 8, color: 'white' }}>
+            <ArrowLeft size={20} />
+          </Link>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{video.title}</h1>
+            <p style={{ fontSize: 11, color: '#9ca3af' }}>
+              {new Date(video.date).toLocaleDateString('cs-CZ')}
+              {video.opponent && ` • vs. ${video.opponent}`}
+              {scoreDisplay && ` (${scoreDisplay})`}
+            </p>
           </div>
-
-          {/* Mobile panel toggle */}
-          <button
-            onClick={() => setShowPanel(!showPanel)}
-            style={{
-              display: 'flex',
-              padding: 8,
-              backgroundColor: showPanel ? '#2563eb' : '#1f2937',
-              border: 'none',
-              borderRadius: 8,
-              color: 'white',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            <MessageSquare size={18} />
-            <span style={{ marginLeft: 4, fontSize: 12 }}>{comments.length}</span>
-          </button>
         </div>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Video Container */}
-        <div style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, flexShrink: 0 }}>
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: '800px',
-            aspectRatio: '16/9',
-            backgroundColor: '#1f2937',
-            borderRadius: 8,
-            overflow: 'hidden',
-            touchAction: isDrawingMode ? 'none' : 'auto',
-          }}>
-            {videoUrl ? (
-              <video
-                ref={videoRef}
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                src={videoUrl}
-                onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
-                onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                playsInline
-              />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p style={{ color: '#6b7280' }}>Video není k dispozici</p>
-              </div>
-            )}
-            <canvas
-              ref={canvasRef}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                cursor: selectedTool !== 'select' ? 'crosshair' : 'default',
-                touchAction: isDrawingMode ? 'none' : 'auto',
-              }}
-              width={1920}
-              height={1080}
-              onMouseDown={handlePointerDown}
-              onMouseMove={handlePointerMove}
-              onMouseUp={handlePointerUp}
-              onMouseLeave={handlePointerUp}
-              onTouchStart={handlePointerDown}
-              onTouchMove={handlePointerMove}
-              onTouchEnd={handlePointerUp}
-            />
-
-            {/* Drawing mode indicator */}
-            {isDrawingMode && (
-              <div style={{
-                position: 'absolute',
-                top: 8,
-                left: 8,
-                backgroundColor: 'rgba(37, 99, 235, 0.9)',
-                padding: '4px 8px',
-                borderRadius: 6,
-                fontSize: 11,
-                fontWeight: 500,
-              }}>
-                ✏️ Kreslení aktivní
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Toolbar - Fixed width with horizontal scroll */}
+      {/* Video */}
+      <div style={{ backgroundColor: '#000', padding: 8 }}>
         <div style={{
-          backgroundColor: '#111827',
-          borderTop: '1px solid #1f2937',
-          padding: '8px 0',
-          flexShrink: 0,
+          position: 'relative',
           width: '100%',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
+          maxWidth: 800,
+          margin: '0 auto',
+          aspectRatio: '16/9',
+          backgroundColor: '#1f2937',
+          borderRadius: 8,
+          overflow: 'hidden',
+          touchAction: isDrawingMode ? 'none' : 'auto',
         }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '0 12px',
-            minWidth: 'max-content',
-          }}>
-            {/* Tools */}
-            <div style={{ display: 'flex', gap: 2, backgroundColor: '#1f2937', padding: 4, borderRadius: 8 }}>
-              {[
-                { tool: 'select' as ToolType, icon: <MousePointer size={16} />, label: 'Výběr' },
-                { tool: 'pencil' as ToolType, icon: <Pencil size={16} />, label: 'Tužka' },
-                { tool: 'arrow' as ToolType, icon: <ArrowRight size={16} />, label: 'Šipka' },
-                { tool: 'circle' as ToolType, icon: <Circle size={16} />, label: 'Kruh' },
-                { tool: 'rectangle' as ToolType, icon: <Square size={16} />, label: 'Obdélník' },
-                { tool: 'playerMarker' as ToolType, icon: <Users size={16} />, label: 'Hráč' },
-              ].map(({ tool, icon, label }) => (
-                <button
-                  key={tool}
-                  onClick={() => setSelectedTool(tool)}
-                  title={label}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 6,
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    backgroundColor: selectedTool === tool ? '#2563eb' : 'transparent',
-                    color: selectedTool === tool ? 'white' : '#9ca3af',
-                  }}
-                >
-                  {icon}
-                </button>
-              ))}
+          {videoUrl ? (
+            <video
+              ref={videoRef}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              src={videoUrl}
+              onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
+              onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              playsInline
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <p style={{ color: '#6b7280' }}>Video není k dispozici</p>
             </div>
-
-            {/* Separator */}
-            <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />
-
-            {/* Colors */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {COLORS.map(color => (
-                <button
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
-                    border: selectedColor === color ? '3px solid white' : '2px solid transparent',
-                    backgroundColor: color,
-                    cursor: 'pointer',
-                    boxShadow: selectedColor === color ? '0 0 0 2px #2563eb' : 'none',
-                  }}
-                />
-              ))}
+          )}
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              cursor: isDrawingMode ? 'crosshair' : 'default',
+              touchAction: isDrawingMode ? 'none' : 'auto',
+            }}
+            width={1920} height={1080}
+            onMouseDown={handlePointerDown}
+            onMouseMove={handlePointerMove}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchMove={handlePointerMove}
+            onTouchEnd={handlePointerUp}
+          />
+          {isDrawingMode && (
+            <div style={{
+              position: 'absolute', top: 8, left: 8,
+              backgroundColor: 'rgba(37, 99, 235, 0.9)',
+              padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+            }}>
+              ✏️ Kreslení aktivní
             </div>
+          )}
+        </div>
+      </div>
 
-            {/* Separator */}
-            <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />
-
-            {/* Stroke Width */}
-            <div style={{ display: 'flex', gap: 2, backgroundColor: '#1f2937', padding: 4, borderRadius: 8 }}>
-              {STROKE_WIDTHS.map(width => (
-                <button
-                  key={width}
-                  onClick={() => setStrokeWidth(width)}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 6,
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    backgroundColor: strokeWidth === width ? '#2563eb' : 'transparent',
-                    color: 'white',
-                  }}
-                >
-                  <div style={{
-                    width: width * 2,
-                    height: width * 2,
-                    borderRadius: '50%',
-                    backgroundColor: 'currentColor',
-                  }} />
-                </button>
-              ))}
-            </div>
-
-            {/* Separator */}
-            <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />
-
-            {/* Actions */}
+      {/* Toolbar - wrapped rows */}
+      <div style={{ backgroundColor: '#111827', padding: 12 }}>
+        {/* Row 1: Tools */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+          {[
+            { tool: 'select' as ToolType, icon: <MousePointer size={18} />, label: 'Výběr' },
+            { tool: 'pencil' as ToolType, icon: <Pencil size={18} />, label: 'Tužka' },
+            { tool: 'arrow' as ToolType, icon: <ArrowRight size={18} />, label: 'Šipka' },
+            { tool: 'circle' as ToolType, icon: <Circle size={18} />, label: 'Kruh' },
+            { tool: 'rectangle' as ToolType, icon: <Square size={18} />, label: 'Obdélník' },
+            { tool: 'playerMarker' as ToolType, icon: <Users size={18} />, label: 'Hráč' },
+          ].map(({ tool, icon }) => (
             <button
-              onClick={toggleRecording}
+              key={tool}
+              onClick={() => setSelectedTool(tool)}
               style={{
-                padding: '8px 12px',
-                backgroundColor: isRecording ? '#dc2626' : '#1f2937',
-                border: 'none',
-                borderRadius: 8,
-                color: 'white',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                whiteSpace: 'nowrap',
+                width: 44, height: 44, borderRadius: 8, border: 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                backgroundColor: selectedTool === tool ? '#2563eb' : '#1f2937',
+                color: selectedTool === tool ? 'white' : '#9ca3af',
               }}
             >
-              {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
-              {isRecording ? formatTime(recordingTime) : 'Nahrát'}
+              {icon}
             </button>
+          ))}
+        </div>
 
+        {/* Row 2: Colors & Stroke */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+          {COLORS.map(color => (
             <button
-              onClick={captureScreenshot}
+              key={color}
+              onClick={() => setSelectedColor(color)}
               style={{
-                padding: '8px 12px',
+                width: 28, height: 28, borderRadius: '50%',
+                border: selectedColor === color ? '3px solid white' : '2px solid transparent',
+                backgroundColor: color, cursor: 'pointer',
+                boxShadow: selectedColor === color ? '0 0 0 2px #2563eb' : 'none',
+              }}
+            />
+          ))}
+          <div style={{ width: 1, height: 24, backgroundColor: '#374151', margin: '0 4px' }} />
+          {STROKE_WIDTHS.map(w => (
+            <button
+              key={w}
+              onClick={() => setStrokeWidth(w)}
+              style={{
+                width: 32, height: 32, borderRadius: 6, border: 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                backgroundColor: strokeWidth === w ? '#2563eb' : '#1f2937',
+              }}
+            >
+              <div style={{ width: w * 2, height: w * 2, borderRadius: '50%', backgroundColor: 'white' }} />
+            </button>
+          ))}
+        </div>
+
+        {/* Row 3: Actions */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button
+            onClick={toggleRecording}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: isRecording ? '#dc2626' : '#1f2937',
+              border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+            }}
+          >
+            {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
+            {isRecording ? `${formatTime(recordingTime)}` : 'Nahrát'}
+          </button>
+
+          <button
+            onClick={captureScreenshot}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#1f2937',
+              border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+            }}
+          >
+            <Camera size={18} />
+            Screenshot
+          </button>
+
+          {annotations.length > 0 && (
+            <button
+              onClick={() => setAnnotations([])}
+              style={{
+                padding: '10px 16px',
                 backgroundColor: '#1f2937',
-                border: 'none',
-                borderRadius: 8,
-                color: 'white',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
+                border: 'none', borderRadius: 8, color: '#ef4444', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
               }}
             >
-              <Camera size={16} />
+              <Trash2 size={18} />
+              Smazat
             </button>
+          )}
+        </div>
 
-            {screenshots.length > 0 && (
-              <button
-                onClick={() => setShowScreenshots(!showScreenshots)}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: showScreenshots ? '#2563eb' : '#1f2937',
-                  border: 'none',
-                  borderRadius: 8,
-                  color: 'white',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <ImageIcon size={16} />
-                {screenshots.length}
-              </button>
-            )}
+        {/* Transcription preview */}
+        {isRecording && transcription && (
+          <div style={{
+            marginTop: 8, padding: 8, backgroundColor: '#1f2937',
+            borderRadius: 8, fontSize: 12, color: '#9ca3af',
+          }}>
+            <strong>Přepis:</strong> {transcription}
+          </div>
+        )}
+      </div>
 
-            {annotations.length > 0 && (
-              <button
-                onClick={() => setAnnotations([])}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#1f2937',
-                  border: 'none',
-                  borderRadius: 8,
-                  color: '#ef4444',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <Trash2 size={16} />
-              </button>
+      {/* Video Controls */}
+      <div style={{ backgroundColor: '#111827', padding: '12px 16px', borderTop: '1px solid #1f2937' }}>
+        <input
+          type="range"
+          min={0} max={duration || 100} value={currentTime}
+          onChange={e => seek(parseFloat(e.target.value))}
+          style={{ width: '100%', height: 8, borderRadius: 4, appearance: 'none', backgroundColor: '#374151', cursor: 'pointer', marginBottom: 12 }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => seek(currentTime - 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
+              <SkipBack size={20} />
+            </button>
+            <button onClick={togglePlay} style={{
+              width: 44, height: 44, borderRadius: '50%', border: 'none',
+              backgroundColor: '#2563eb', color: 'white', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {isPlaying ? <Pause size={20} /> : <Play size={20} style={{ marginLeft: 2 }} />}
+            </button>
+            <button onClick={() => seek(currentTime + 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
+              <SkipForward size={20} />
+            </button>
+            <span style={{ color: '#9ca3af', fontSize: 13 }}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <select
+              value={playbackRate}
+              onChange={e => {
+                const rate = parseFloat(e.target.value);
+                setPlaybackRate(rate);
+                if (videoRef.current) videoRef.current.playbackRate = rate;
+              }}
+              style={{ backgroundColor: '#1f2937', color: 'white', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12 }}
+            >
+              <option value={0.25}>0.25x</option>
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={1.5}>1.5x</option>
+              <option value={2}>2x</option>
+            </select>
+            <button onClick={toggleMute} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Screenshots Section */}
+      {screenshots.length > 0 && (
+        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📸 Screenshoty ({screenshots.length})</h3>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8 }}>
+            {screenshots.map(s => (
+              <div key={s.id} style={{ position: 'relative', flexShrink: 0 }}>
+                <img
+                  src={s.dataUrl}
+                  alt={`Screenshot ${formatTime(s.time)}`}
+                  onClick={() => seek(s.time)}
+                  style={{ height: 70, borderRadius: 6, cursor: 'pointer' }}
+                />
+                <button
+                  onClick={() => handleDeleteScreenshot(s.id)}
+                  style={{
+                    position: 'absolute', top: 2, right: 2, width: 18, height: 18,
+                    borderRadius: '50%', border: 'none', backgroundColor: 'rgba(0,0,0,0.7)',
+                    color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <X size={10} />
+                </button>
+                <span style={{
+                  position: 'absolute', bottom: 2, left: 2,
+                  fontSize: 9, backgroundColor: 'rgba(0,0,0,0.7)', padding: '1px 4px', borderRadius: 3,
+                }}>{formatTime(s.time)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Audio Comments Section */}
+      {audioComments.length > 0 && (
+        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🎙️ Hlasové komentáře ({audioComments.length})</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {audioComments.map(a => (
+              <div key={a.id} style={{
+                backgroundColor: '#1f2937', padding: 10, borderRadius: 8,
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+              }}>
+                <button
+                  onClick={() => seek(a.time)}
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    backgroundColor: '#2563eb', border: 'none', color: 'white',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <PlayCircle size={18} />
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    {formatTime(a.time)} • {a.duration}s
+                  </div>
+                  {(a as any).transcript && (
+                    <p style={{ fontSize: 13, margin: 0, marginBottom: 6 }}>{(a as any).transcript}</p>
+                  )}
+                  {a.blobUrl && (
+                    <audio src={a.blobUrl} controls style={{ width: '100%', height: 32 }} />
+                  )}
+                </div>
+                <button
+                  onClick={() => handleDeleteAudio(a.id)}
+                  style={{
+                    padding: 4, backgroundColor: 'transparent', border: 'none',
+                    color: '#6b7280', cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Text Comments Section */}
+      <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937' }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>💬 Komentáře ({comments.length})</h3>
+
+        {/* Add comment */}
+        <div style={{ marginBottom: 12 }}>
+          {selectedPlayers.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+              {selectedPlayers.map(p => (
+                <span key={p.id} style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 12,
+                  backgroundColor: 'rgba(59, 130, 246, 0.3)', color: '#60a5fa',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}>
+                  {p.number ? `#${p.number} ` : ''}{p.name}
+                  <button onClick={() => setSelectedPlayers(prev => prev.filter(x => x.id !== p.id))}
+                    style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0 }}>
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <input
+              type="text"
+              value={playerSearch}
+              onChange={e => { setPlayerSearch(e.target.value); setShowPlayerDropdown(true); }}
+              onFocus={() => setShowPlayerDropdown(true)}
+              placeholder="@ Označit hráče..."
+              style={{
+                width: '100%', backgroundColor: '#1f2937', border: 'none',
+                borderRadius: 6, padding: '8px 10px', color: 'white', fontSize: 13,
+              }}
+            />
+            {showPlayerDropdown && (
+              <div style={{
+                position: 'absolute', bottom: '100%', left: 0, right: 0,
+                backgroundColor: '#1f2937', borderRadius: 6, marginBottom: 4,
+                maxHeight: 150, overflow: 'auto', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+              }}>
+                {searchPlayers(playerSearch).filter(p => !selectedPlayers.find(sp => sp.id === p.id)).slice(0, 6).map(p => (
+                  <button key={p.id} onClick={() => addPlayerTag(p)} style={{
+                    width: '100%', padding: '10px 12px', backgroundColor: 'transparent',
+                    border: 'none', color: 'white', textAlign: 'left', cursor: 'pointer', fontSize: 13,
+                  }}>
+                    {p.number ? `#${p.number} ` : ''}{p.name}
+                  </button>
+                ))}
+              </div>
             )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              placeholder={`Komentář v ${formatTime(currentTime)}...`}
+              style={{
+                flex: 1, backgroundColor: '#1f2937', border: 'none',
+                borderRadius: 6, padding: '10px 12px', color: 'white', fontSize: 14,
+              }}
+              onKeyDown={e => e.key === 'Enter' && handleAddComment()}
+              onFocus={() => setShowPlayerDropdown(false)}
+            />
+            <button
+              onClick={handleAddComment}
+              disabled={!newComment.trim()}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: newComment.trim() ? '#22c55e' : '#374151',
+                border: 'none', borderRadius: 6, color: 'white',
+                cursor: newComment.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <Send size={18} />
+            </button>
           </div>
         </div>
 
-        {/* Screenshots Gallery */}
-        {showScreenshots && screenshots.length > 0 && (
-          <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: 12, flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              {screenshots.map(screenshot => (
-                <div key={screenshot.id} style={{ position: 'relative', flexShrink: 0 }}>
-                  <img
-                    src={screenshot.dataUrl}
-                    alt={`Screenshot at ${formatTime(screenshot.time)}`}
-                    style={{ height: 80, borderRadius: 8, cursor: 'pointer' }}
-                    onClick={() => seek(screenshot.time)}
-                  />
+        {/* Comments list */}
+        {comments.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#6b7280', padding: 16, fontSize: 13 }}>
+            Zatím žádné komentáře
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {comments.sort((a, b) => a.time - b.time).map(c => (
+              <div
+                key={c.id}
+                onClick={() => seek(c.time)}
+                style={{
+                  backgroundColor: '#1f2937', borderRadius: 8, padding: 10, cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(c.time)}</span>
                   <button
-                    onClick={() => handleDeleteScreenshot(screenshot.id)}
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      width: 20,
-                      height: 20,
-                      borderRadius: '50%',
-                      border: 'none',
-                      backgroundColor: 'rgba(0,0,0,0.7)',
-                      color: 'white',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
+                    onClick={e => { e.stopPropagation(); handleDeleteComment(c.id); }}
+                    style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 2 }}
                   >
                     <X size={12} />
                   </button>
-                  <span style={{
-                    position: 'absolute',
-                    bottom: 4,
-                    left: 4,
-                    fontSize: 10,
-                    backgroundColor: 'rgba(0,0,0,0.7)',
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                  }}>
-                    {formatTime(screenshot.time)}
-                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Video Controls */}
-        <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: '12px 16px', flexShrink: 0 }}>
-          {/* Timeline */}
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            value={currentTime}
-            onChange={e => seek(parseFloat(e.target.value))}
-            style={{
-              width: '100%',
-              height: 8,
-              borderRadius: 4,
-              appearance: 'none',
-              backgroundColor: '#374151',
-              cursor: 'pointer',
-              marginBottom: 12,
-            }}
-          />
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={() => seek(currentTime - 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
-                <SkipBack size={20} />
-              </button>
-              <button
-                onClick={togglePlay}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  border: 'none',
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {isPlaying ? <Pause size={20} /> : <Play size={20} style={{ marginLeft: 2 }} />}
-              </button>
-              <button onClick={() => seek(currentTime + 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
-                <SkipForward size={20} />
-              </button>
-              <span style={{ color: '#9ca3af', fontSize: 13, marginLeft: 8 }}>
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <select
-                value={playbackRate}
-                onChange={e => {
-                  const rate = parseFloat(e.target.value);
-                  setPlaybackRate(rate);
-                  if (videoRef.current) videoRef.current.playbackRate = rate;
-                }}
-                style={{
-                  backgroundColor: '#1f2937',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '6px 10px',
-                  fontSize: 12,
-                }}
-              >
-                <option value={0.25}>0.25x</option>
-                <option value={0.5}>0.5x</option>
-                <option value={1}>1x</option>
-                <option value={1.5}>1.5x</option>
-                <option value={2}>2x</option>
-              </select>
-
-              <button onClick={toggleMute} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
-                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Comments Panel (slide up on mobile) */}
-        {showPanel && (
-          <div style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: '#111827',
-            borderTop: '1px solid #1f2937',
-            maxHeight: '60vh',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 100,
-            borderRadius: '16px 16px 0 0',
-          }}>
-            {/* Panel Header */}
-            <div style={{ padding: 12, borderBottom: '1px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', backgroundColor: team?.jerseyColor || '#ffffff', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Shield size={14} color="#22c55e" />
-                </div>
-                <span style={{ fontSize: 14, fontWeight: 500 }}>{team?.name || 'SK Slatina 2017'}</span>
-              </div>
-              <button onClick={() => setShowPanel(false)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Comments List */}
-            <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-              {comments.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#6b7280', padding: 24 }}>
-                  Zatím žádné komentáře.<br />
-                  <span style={{ fontSize: 12 }}>Přidejte komentář k aktuálnímu času.</span>
-                </p>
-              ) : (
-                comments.sort((a, b) => a.time - b.time).map(comment => (
-                  <div
-                    key={comment.id}
-                    onClick={() => { seek(comment.time); setShowPanel(false); }}
-                    style={{
-                      backgroundColor: '#1f2937',
-                      borderRadius: 8,
-                      padding: 12,
-                      marginBottom: 8,
-                      position: 'relative',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(comment.time)}</span>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                        style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 2 }}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                    <p style={{ fontSize: 13 }}>{comment.text}</p>
-                    {comment.playerIds?.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                        {getPlayersByIds(comment.playerIds).map(player => (
-                          <span key={player.id} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' }}>
-                            {player.number ? `#${player.number} ` : ''}{player.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Add Comment */}
-            <div style={{ padding: 12, borderTop: '1px solid #1f2937' }}>
-              {selectedPlayers.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                  {selectedPlayers.map(player => (
-                    <span key={player.id} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, backgroundColor: 'rgba(59, 130, 246, 0.3)', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {player.number ? `#${player.number} ` : ''}{player.name}
-                      <button onClick={() => removePlayerTag(player.id)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ position: 'relative', marginBottom: 8 }}>
-                <input
-                  type="text"
-                  value={playerSearch}
-                  onChange={e => { setPlayerSearch(e.target.value); setShowPlayerDropdown(true); }}
-                  onFocus={() => setShowPlayerDropdown(true)}
-                  placeholder="@ Označit hráče..."
-                  style={{ width: '100%', backgroundColor: '#1f2937', border: 'none', borderRadius: 6, padding: '8px 10px', color: 'white', fontSize: 13 }}
-                />
-                {showPlayerDropdown && (
-                  <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, backgroundColor: '#1f2937', borderRadius: 6, marginBottom: 4, maxHeight: 150, overflow: 'auto', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)' }}>
-                    {searchPlayers(playerSearch).filter(p => !selectedPlayers.find(sp => sp.id === p.id)).slice(0, 6).map(player => (
-                      <button key={player.id} onClick={() => addPlayerTag(player)} style={{ width: '100%', padding: '10px 12px', backgroundColor: 'transparent', border: 'none', color: 'white', textAlign: 'left', cursor: 'pointer', fontSize: 13 }}>
-                        {player.number ? `#${player.number} ` : ''}{player.name}
-                      </button>
+                <p style={{ fontSize: 13, margin: 0 }}>{c.text}</p>
+                {c.playerIds?.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                    {getPlayersByIds(c.playerIds).map(p => (
+                      <span key={p.id} style={{
+                        fontSize: 10, padding: '2px 6px', borderRadius: 10,
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa',
+                      }}>
+                        {p.number ? `#${p.number} ` : ''}{p.name}
+                      </span>
                     ))}
                   </div>
                 )}
               </div>
-
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  placeholder={`Komentář v ${formatTime(currentTime)}...`}
-                  style={{ flex: 1, backgroundColor: '#1f2937', border: 'none', borderRadius: 6, padding: '10px 12px', color: 'white', fontSize: 14 }}
-                  onKeyDown={e => e.key === 'Enter' && handleAddComment()}
-                  onFocus={() => setShowPlayerDropdown(false)}
-                />
-                <button
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim()}
-                  style={{ padding: '10px 16px', backgroundColor: newComment.trim() ? '#22c55e' : '#374151', border: 'none', borderRadius: 6, color: 'white', cursor: newComment.trim() ? 'pointer' : 'not-allowed' }}
-                >
-                  <Send size={18} />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Player Marker Selection Modal */}
-        {showPlayerSelect && (
-          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 320, maxHeight: '60vh', overflow: 'auto' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Vyber hráče</h3>
-              {getPlayers().filter(p => p.active).map(player => (
-                <button
-                  key={player.id}
-                  onClick={() => addPlayerMarker(player)}
-                  style={{ width: '100%', padding: 12, backgroundColor: '#374151', border: 'none', borderRadius: 8, color: 'white', textAlign: 'left', cursor: 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}
-                >
-                  <span style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                    {player.number || '?'}
-                  </span>
-                  <span>{player.name}</span>
-                </button>
-              ))}
-              <button
-                onClick={() => { setShowPlayerSelect(false); setMarkerPosition(null); }}
-                style={{ width: '100%', padding: 12, backgroundColor: '#374151', border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', marginTop: 8 }}
-              >
-                Zrušit
-              </button>
-            </div>
+            ))}
           </div>
         )}
       </div>
+
+      {/* Bottom padding */}
+      <div style={{ height: 80 }} />
+
+      {/* Player Marker Modal */}
+      {showPlayerSelect && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 320, maxHeight: '60vh', overflow: 'auto' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Vyber hráče</h3>
+            {getPlayers().filter(p => p.active).map(player => (
+              <button
+                key={player.id}
+                onClick={() => addPlayerMarker(player)}
+                style={{
+                  width: '100%', padding: 12, backgroundColor: '#374151',
+                  border: 'none', borderRadius: 8, color: 'white', textAlign: 'left',
+                  cursor: 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12,
+                }}
+              >
+                <span style={{
+                  width: 32, height: 32, borderRadius: '50%', backgroundColor: '#2563eb',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+                }}>
+                  {player.number || '?'}
+                </span>
+                <span>{player.name}</span>
+              </button>
+            ))}
+            <button
+              onClick={() => { setShowPlayerSelect(false); setMarkerPosition(null); }}
+              style={{
+                width: '100%', padding: 12, backgroundColor: '#374151',
+                border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', marginTop: 8,
+              }}
+            >
+              Zrušit
+            </button>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -1081,12 +1000,10 @@ function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, w
     case 'playerMarker':
       if (points.length < 1) return;
       const pm = toCanvas(points[0]);
-      // Draw circle
       ctx.beginPath();
       ctx.arc(pm.x, pm.y, 25, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-      // Draw name
       if (playerName) {
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 14px sans-serif';
