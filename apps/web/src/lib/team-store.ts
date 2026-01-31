@@ -42,10 +42,50 @@ export interface AIFeedback {
   createdAt: number;
 }
 
+// Zápas nebo turnaj
+export interface Match {
+  id: string;
+  type: 'match' | 'tournament' | 'training';
+  name: string;
+  opponent?: string;
+  date: string;
+  location?: string;
+  result?: {
+    goalsFor: number;
+    goalsAgainst: number;
+  };
+  videoIds: string[];
+  playerIds: string[]; // Hráči, kteří se účastnili
+  createdAt: number;
+}
+
+// Gól nebo asistence
+export interface Goal {
+  id: string;
+  matchId: string;
+  videoId?: string;
+  playerId: string;
+  assistPlayerId?: string;
+  minute?: number;
+  videoTime?: number; // Čas ve videu
+  createdAt: number;
+}
+
+// Statistiky hráče
+export interface PlayerStats {
+  playerId: string;
+  matchesPlayed: number;
+  goals: number;
+  assists: number;
+  commentsCount: number;
+}
+
 const TEAM_KEY = 'slatina-team';
 const COMMENTS_KEY = 'slatina-comments';
 const FEEDBACK_KEY = 'slatina-feedback';
 const PLAYERS_KEY = 'slatina-players';
+const MATCHES_KEY = 'slatina-matches';
+const GOALS_KEY = 'slatina-goals';
 
 // Default team configuration - SK Slatina 2017
 const DEFAULT_TEAM: TeamConfig = {
@@ -260,4 +300,125 @@ export function getCommentsForPlayer(playerId: string): CoachComment[] {
 export function getVideoIdsForPlayer(playerId: string): string[] {
   const comments = getCommentsForPlayer(playerId);
   return [...new Set(comments.map(c => c.videoId))];
+}
+
+// === MATCH/TOURNAMENT MANAGEMENT ===
+
+export function getMatches(): Match[] {
+  if (typeof window === 'undefined') return [];
+  const data = localStorage.getItem(MATCHES_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+export function saveMatches(matches: Match[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(MATCHES_KEY, JSON.stringify(matches));
+  }
+}
+
+export function addMatch(match: Omit<Match, 'id' | 'createdAt' | 'videoIds'>): Match {
+  const newMatch: Match = {
+    ...match,
+    id: `match-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    videoIds: [],
+    createdAt: Date.now(),
+  };
+  const matches = getMatches();
+  matches.unshift(newMatch);
+  saveMatches(matches);
+  return newMatch;
+}
+
+export function updateMatch(id: string, updates: Partial<Match>): Match | null {
+  const matches = getMatches();
+  const index = matches.findIndex(m => m.id === id);
+  if (index === -1) return null;
+  matches[index] = { ...matches[index], ...updates };
+  saveMatches(matches);
+  return matches[index];
+}
+
+export function deleteMatch(id: string): void {
+  const matches = getMatches().filter(m => m.id !== id);
+  saveMatches(matches);
+}
+
+export function getMatchById(id: string): Match | undefined {
+  return getMatches().find(m => m.id === id);
+}
+
+export function addVideoToMatch(matchId: string, videoId: string): void {
+  const match = getMatchById(matchId);
+  if (match && !match.videoIds.includes(videoId)) {
+    updateMatch(matchId, { videoIds: [...match.videoIds, videoId] });
+  }
+}
+
+export function getMatchesForPlayer(playerId: string): Match[] {
+  return getMatches().filter(m => m.playerIds?.includes(playerId));
+}
+
+// === GOAL MANAGEMENT ===
+
+export function getGoals(): Goal[] {
+  if (typeof window === 'undefined') return [];
+  const data = localStorage.getItem(GOALS_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+export function saveGoals(goals: Goal[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
+  }
+}
+
+export function addGoal(goal: Omit<Goal, 'id' | 'createdAt'>): Goal {
+  const newGoal: Goal = {
+    ...goal,
+    id: `goal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: Date.now(),
+  };
+  const goals = getGoals();
+  goals.push(newGoal);
+  saveGoals(goals);
+  return newGoal;
+}
+
+export function deleteGoal(id: string): void {
+  const goals = getGoals().filter(g => g.id !== id);
+  saveGoals(goals);
+}
+
+export function getGoalsForMatch(matchId: string): Goal[] {
+  return getGoals().filter(g => g.matchId === matchId);
+}
+
+export function getGoalsForPlayer(playerId: string): Goal[] {
+  return getGoals().filter(g => g.playerId === playerId);
+}
+
+export function getAssistsForPlayer(playerId: string): Goal[] {
+  return getGoals().filter(g => g.assistPlayerId === playerId);
+}
+
+// === PLAYER STATISTICS ===
+
+export function getPlayerStats(playerId: string): PlayerStats {
+  const matches = getMatchesForPlayer(playerId);
+  const goals = getGoalsForPlayer(playerId);
+  const assists = getAssistsForPlayer(playerId);
+  const comments = getCommentsForPlayer(playerId);
+
+  return {
+    playerId,
+    matchesPlayed: matches.length,
+    goals: goals.length,
+    assists: assists.length,
+    commentsCount: comments.length,
+  };
+}
+
+export function getAllPlayerStats(): PlayerStats[] {
+  const players = getPlayers();
+  return players.map(p => getPlayerStats(p.id));
 }
