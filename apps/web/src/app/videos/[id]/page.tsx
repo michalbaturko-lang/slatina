@@ -25,6 +25,10 @@ import {
   Send,
   Users,
   PlayCircle,
+  MessageSquare,
+  Image as ImageIcon,
+  Share2,
+  Download,
 } from 'lucide-react';
 import {
   getVideo,
@@ -66,8 +70,16 @@ interface Annotation {
   playerName?: string;
 }
 
+// Timeline marker types
+interface TimelineMarker {
+  id: string;
+  time: number;
+  type: 'comment' | 'screenshot' | 'audio';
+  label?: string;
+}
+
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ffffff'];
-const STROKE_WIDTHS = [2, 4, 6, 8];
+const STROKE_WIDTHS = [4, 6, 8, 12];
 
 export default function VideoDetailPage({ params }: { params: { id: string } }) {
   const [video, setVideo] = useState<DemoVideo | null>(null);
@@ -77,6 +89,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -86,7 +99,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const [selectedTool, setSelectedTool] = useState<ToolType>('select');
   const [selectedColor, setSelectedColor] = useState('#ef4444');
-  const [strokeWidth, setStrokeWidth] = useState(4);
+  const [strokeWidth, setStrokeWidth] = useState(6);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -103,6 +116,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef<string>('');
 
   // Screenshots and audio comments
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
@@ -115,8 +129,19 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [playerSearch, setPlayerSearch] = useState('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
 
+  // Responsive
+  const [isMobile, setIsMobile] = useState(false);
+
   const team = typeof window !== 'undefined' ? getTeam() : null;
   const isDrawingMode = selectedTool !== 'select';
+
+  // Check if mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Lock body scroll when drawing
   useEffect(() => {
@@ -132,6 +157,28 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       document.body.style.touchAction = '';
     };
   }, [isDrawingMode]);
+
+  // Smooth time update using requestAnimationFrame
+  useEffect(() => {
+    const updateTime = () => {
+      if (videoRef.current && isPlaying) {
+        setCurrentTime(videoRef.current.currentTime);
+        animationRef.current = requestAnimationFrame(updateTime);
+      }
+    };
+
+    if (isPlaying) {
+      animationRef.current = requestAnimationFrame(updateTime);
+    } else if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying]);
 
   useEffect(() => {
     const loadVideoData = async () => {
@@ -169,7 +216,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const seek = useCallback((time: number) => {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, Math.min(time, duration));
+    const newTime = Math.max(0, Math.min(time, duration));
+    videoRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
   }, [duration]);
 
   const toggleMute = useCallback(() => {
@@ -278,8 +327,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         const recorder = new MediaRecorder(stream);
         mediaRecorderRef.current = recorder;
         audioChunksRef.current = [];
+        transcriptRef.current = '';
         const startTime = currentTime;
-        let finalTranscript = '';
+        const recordStartTime = Date.now();
 
         // Start speech recognition
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -289,16 +339,14 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           recognition.continuous = true;
           recognition.interimResults = true;
           recognition.onresult = (event: any) => {
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript + ' ';
-              } else {
-                interim += event.results[i][0].transcript;
-              }
+            let fullTranscript = '';
+            for (let i = 0; i < event.results.length; i++) {
+              fullTranscript += event.results[i][0].transcript + ' ';
             }
-            setTranscription(finalTranscript + interim);
+            transcriptRef.current = fullTranscript.trim();
+            setTranscription(fullTranscript.trim());
           };
+          recognition.onerror = (e: any) => console.log('Speech recognition error:', e.error);
           recognition.start();
           recognitionRef.current = recognition;
         }
@@ -307,30 +355,34 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         recorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           const audioUrl = URL.createObjectURL(audioBlob);
-          const currentTranscript = transcription.trim() || finalTranscript.trim();
+          const finalTranscript = transcriptRef.current;
+          const recordingDuration = Math.round((Date.now() - recordStartTime) / 1000);
+
           if (video) {
             const newAudio = addAudioComment(video.id, {
               time: startTime,
-              duration: recordingTime,
+              duration: recordingDuration,
               blobUrl: audioUrl,
             });
             if (newAudio) {
-              // Store transcript in the audio comment
-              const audioWithTranscript = { ...newAudio, transcript: currentTranscript };
-              setAudioComments(prev => [...prev, audioWithTranscript as any]);
-              // Update video storage with transcript
+              // Create audio with transcript
+              const audioWithTranscript: AudioComment = { ...newAudio, transcript: finalTranscript };
+              setAudioComments(prev => [...prev, audioWithTranscript]);
+
+              // Update in storage with transcript
               const updatedVideo = getVideo(video.id);
               if (updatedVideo) {
                 const updatedAudioComments = updatedVideo.audioComments.map(a =>
-                  a.id === newAudio.id ? { ...a, transcript: currentTranscript } : a
+                  a.id === newAudio.id ? { ...a, transcript: finalTranscript } : a
                 );
-                updateVideo(video.id, { audioComments: updatedAudioComments } as any);
+                updateVideo(video.id, { audioComments: updatedAudioComments });
               }
             }
           }
           stream.getTracks().forEach(track => track.stop());
           setRecordingTime(0);
           setTranscription('');
+          transcriptRef.current = '';
         };
 
         recorder.start();
@@ -341,7 +393,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         alert('Nelze spustit nahrávání. Povolte přístup k mikrofonu.');
       }
     }
-  }, [isRecording, currentTime, recordingTime, video, transcription]);
+  }, [isRecording, currentTime, video]);
 
   // Screenshot
   const captureScreenshot = useCallback(() => {
@@ -353,22 +405,15 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     }
 
     try {
-      // Create canvas with video dimensions
       const canvas = document.createElement('canvas');
       const width = videoEl.videoWidth || 1280;
       const height = videoEl.videoHeight || 720;
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        console.error('Could not get canvas context');
-        return;
-      }
+      if (!ctx) return;
 
-      // Draw video frame
       ctx.drawImage(videoEl, 0, 0, width, height);
-
-      // Draw annotations if canvas exists
       if (annotationCanvas) {
         ctx.drawImage(annotationCanvas, 0, 0, width, height);
       }
@@ -378,12 +423,10 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
       if (newScreenshot) {
         setScreenshots(prev => [...prev, newScreenshot]);
-        // Set as thumbnail if first screenshot
         if (!video.thumbnail) {
           updateVideo(video.id, { thumbnail: dataUrl });
           setVideo(prev => prev ? { ...prev, thumbnail: dataUrl } : null);
         }
-        // Visual feedback
         alert('Screenshot uložen!');
       }
     } catch (err) {
@@ -396,6 +439,39 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     if (!video) return;
     deleteScreenshot(video.id, id);
     setScreenshots(prev => prev.filter(s => s.id !== id));
+  }, [video]);
+
+  // Share screenshot using native Share API
+  const shareScreenshot = useCallback(async (screenshot: Screenshot) => {
+    try {
+      // Convert dataUrl to blob
+      const response = await fetch(screenshot.dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `screenshot-${formatTime(screenshot.time)}.jpg`, { type: 'image/jpeg' });
+
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Screenshot v ${formatTime(screenshot.time)}`,
+          text: video?.title || 'Video screenshot',
+        });
+      } else {
+        // Fallback - download the image
+        const link = document.createElement('a');
+        link.href = screenshot.dataUrl;
+        link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
+        link.click();
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Share failed:', err);
+        // Fallback - download
+        const link = document.createElement('a');
+        link.href = screenshot.dataUrl;
+        link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
+        link.click();
+      }
+    }
   }, [video]);
 
   const handleDeleteAudio = useCallback((id: string) => {
@@ -429,11 +505,100 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     setShowPlayerDropdown(false);
   }, [selectedPlayers]);
 
-  const formatTime = (s: number) => {
+  // Share video summary with all annotations
+  const shareVideoSummary = useCallback(async () => {
+    if (!video) return;
+
+    // Build summary text
+    let summary = `📹 ${video.title}\n`;
+    summary += `📅 ${new Date(video.date).toLocaleDateString('cs-CZ')}\n`;
+    if (video.opponent) {
+      summary += `⚽ vs. ${video.opponent}`;
+      if (video.scoreHome !== undefined && video.scoreAway !== undefined) {
+        summary += ` (${video.scoreHome}:${video.scoreAway})`;
+      }
+      summary += '\n';
+    }
+    summary += '\n';
+
+    // Add comments
+    if (comments.length > 0) {
+      summary += '💬 KOMENTÁŘE:\n';
+      comments.sort((a, b) => a.time - b.time).forEach(c => {
+        const players = c.playerIds?.length > 0
+          ? getPlayersByIds(c.playerIds).map(p => `#${p.number} ${p.name}`).join(', ')
+          : '';
+        summary += `  [${formatTime(c.time)}] ${c.text}`;
+        if (players) summary += ` (${players})`;
+        summary += '\n';
+      });
+      summary += '\n';
+    }
+
+    // Add audio transcripts
+    const audioWithTranscripts = audioComments.filter(a => a.transcript);
+    if (audioWithTranscripts.length > 0) {
+      summary += '🎙️ HLASOVÉ KOMENTÁŘE:\n';
+      audioWithTranscripts.forEach(a => {
+        summary += `  [${formatTime(a.time)}] "${a.transcript}"\n`;
+      });
+      summary += '\n';
+    }
+
+    // Add screenshots info
+    if (screenshots.length > 0) {
+      summary += `📸 SCREENSHOTY: ${screenshots.length} momentek\n`;
+      screenshots.forEach(s => {
+        summary += `  [${formatTime(s.time)}]\n`;
+      });
+      summary += '\n';
+    }
+
+    summary += '---\n';
+    summary += 'Vytvořeno v Slatina Video Analysis';
+
+    // Try to share
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: video.title,
+          text: summary,
+        });
+      } else {
+        // Fallback - copy to clipboard
+        await navigator.clipboard.writeText(summary);
+        alert('Shrnutí zkopírováno do schránky!');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        // Fallback - copy to clipboard
+        try {
+          await navigator.clipboard.writeText(summary);
+          alert('Shrnutí zkopírováno do schránky!');
+        } catch {
+          console.error('Could not share or copy:', err);
+        }
+      }
+    }
+  }, [video, comments, audioComments, screenshots]);
+
+  // Format time with decimal for smooth display
+  const formatTime = (s: number, showDecimal = false) => {
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
+    const decimal = Math.floor((s % 1) * 10);
+    if (showDecimal) {
+      return `${m}:${sec.toString().padStart(2, '0')}.${decimal}`;
+    }
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
+
+  // Build timeline markers
+  const timelineMarkers: TimelineMarker[] = [
+    ...comments.map(c => ({ id: c.id, time: c.time, type: 'comment' as const, label: c.text.substring(0, 20) })),
+    ...screenshots.map(s => ({ id: s.id, time: s.time, type: 'screenshot' as const })),
+    ...audioComments.map(a => ({ id: a.id, time: a.time, type: 'audio' as const, label: a.transcript?.substring(0, 20) })),
+  ];
 
   if (loading) {
     return (
@@ -485,6 +650,24 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               {scoreDisplay && ` (${scoreDisplay})`}
             </p>
           </div>
+          <button
+            onClick={shareVideoSummary}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#2563eb',
+              border: 'none',
+              borderRadius: 8,
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+            }}
+          >
+            <Share2 size={16} />
+            Sdílet
+          </button>
         </div>
       </header>
 
@@ -493,7 +676,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         <div style={{
           position: 'relative',
           width: '100%',
-          maxWidth: 800,
+          maxWidth: 900,
           margin: '0 auto',
           aspectRatio: '16/9',
           backgroundColor: '#1f2937',
@@ -506,10 +689,10 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               ref={videoRef}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               src={videoUrl}
-              onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
               onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onSeeked={() => setCurrentTime(videoRef.current?.currentTime || 0)}
               playsInline
             />
           ) : (
@@ -545,105 +728,124 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         </div>
       </div>
 
-      {/* Toolbar - wrapped rows */}
-      <div style={{ backgroundColor: '#111827', padding: 12 }}>
-        {/* Row 1: Tools */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-          {[
-            { tool: 'select' as ToolType, icon: <MousePointer size={18} />, label: 'Výběr' },
-            { tool: 'pencil' as ToolType, icon: <Pencil size={18} />, label: 'Tužka' },
-            { tool: 'arrow' as ToolType, icon: <ArrowRight size={18} />, label: 'Šipka' },
-            { tool: 'circle' as ToolType, icon: <Circle size={18} />, label: 'Kruh' },
-            { tool: 'rectangle' as ToolType, icon: <Square size={18} />, label: 'Obdélník' },
-            { tool: 'playerMarker' as ToolType, icon: <Users size={18} />, label: 'Hráč' },
-          ].map(({ tool, icon }) => (
+      {/* Toolbar - responsive: row on PC, stacked on mobile */}
+      <div style={{ backgroundColor: '#111827', padding: 12, maxWidth: 900, margin: '0 auto' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 8 : 16,
+          alignItems: isMobile ? 'stretch' : 'center',
+        }}>
+          {/* Tools */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {[
+              { tool: 'select' as ToolType, icon: <MousePointer size={18} /> },
+              { tool: 'pencil' as ToolType, icon: <Pencil size={18} /> },
+              { tool: 'arrow' as ToolType, icon: <ArrowRight size={18} /> },
+              { tool: 'circle' as ToolType, icon: <Circle size={18} /> },
+              { tool: 'rectangle' as ToolType, icon: <Square size={18} /> },
+              { tool: 'playerMarker' as ToolType, icon: <Users size={18} /> },
+            ].map(({ tool, icon }) => (
+              <button
+                key={tool}
+                onClick={() => setSelectedTool(tool)}
+                style={{
+                  width: 40, height: 40, borderRadius: 8, border: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  backgroundColor: selectedTool === tool ? '#2563eb' : '#1f2937',
+                  color: selectedTool === tool ? 'white' : '#9ca3af',
+                }}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+
+          {/* Divider on PC */}
+          {!isMobile && <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />}
+
+          {/* Colors */}
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            {COLORS.map(color => (
+              <button
+                key={color}
+                onClick={() => setSelectedColor(color)}
+                style={{
+                  width: 26, height: 26, borderRadius: '50%',
+                  border: selectedColor === color ? '3px solid white' : '2px solid transparent',
+                  backgroundColor: color, cursor: 'pointer',
+                  boxShadow: selectedColor === color ? '0 0 0 2px #2563eb' : 'none',
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Divider on PC */}
+          {!isMobile && <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />}
+
+          {/* Stroke widths */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {STROKE_WIDTHS.map(w => (
+              <button
+                key={w}
+                onClick={() => setStrokeWidth(w)}
+                style={{
+                  width: 32, height: 32, borderRadius: 6, border: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  backgroundColor: strokeWidth === w ? '#2563eb' : '#1f2937',
+                }}
+              >
+                <div style={{ width: w * 2, height: w * 2, borderRadius: '50%', backgroundColor: 'white' }} />
+              </button>
+            ))}
+          </div>
+
+          {/* Divider on PC */}
+          {!isMobile && <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
-              key={tool}
-              onClick={() => setSelectedTool(tool)}
+              onClick={toggleRecording}
               style={{
-                width: 44, height: 44, borderRadius: 8, border: 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                backgroundColor: selectedTool === tool ? '#2563eb' : '#1f2937',
-                color: selectedTool === tool ? 'white' : '#9ca3af',
+                padding: '8px 14px',
+                backgroundColor: isRecording ? '#dc2626' : '#1f2937',
+                border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
               }}
             >
-              {icon}
+              {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
+              {isRecording ? `${formatTime(recordingTime)}` : 'Nahrát'}
             </button>
-          ))}
-        </div>
 
-        {/* Row 2: Colors & Stroke */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-          {COLORS.map(color => (
             <button
-              key={color}
-              onClick={() => setSelectedColor(color)}
+              onClick={captureScreenshot}
               style={{
-                width: 28, height: 28, borderRadius: '50%',
-                border: selectedColor === color ? '3px solid white' : '2px solid transparent',
-                backgroundColor: color, cursor: 'pointer',
-                boxShadow: selectedColor === color ? '0 0 0 2px #2563eb' : 'none',
-              }}
-            />
-          ))}
-          <div style={{ width: 1, height: 24, backgroundColor: '#374151', margin: '0 4px' }} />
-          {STROKE_WIDTHS.map(w => (
-            <button
-              key={w}
-              onClick={() => setStrokeWidth(w)}
-              style={{
-                width: 32, height: 32, borderRadius: 6, border: 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                backgroundColor: strokeWidth === w ? '#2563eb' : '#1f2937',
-              }}
-            >
-              <div style={{ width: w * 2, height: w * 2, borderRadius: '50%', backgroundColor: 'white' }} />
-            </button>
-          ))}
-        </div>
-
-        {/* Row 3: Actions */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <button
-            onClick={toggleRecording}
-            style={{
-              padding: '10px 16px',
-              backgroundColor: isRecording ? '#dc2626' : '#1f2937',
-              border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
-            }}
-          >
-            {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
-            {isRecording ? `${formatTime(recordingTime)}` : 'Nahrát'}
-          </button>
-
-          <button
-            onClick={captureScreenshot}
-            style={{
-              padding: '10px 16px',
-              backgroundColor: '#1f2937',
-              border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
-            }}
-          >
-            <Camera size={18} />
-            Screenshot
-          </button>
-
-          {annotations.length > 0 && (
-            <button
-              onClick={() => setAnnotations([])}
-              style={{
-                padding: '10px 16px',
+                padding: '8px 14px',
                 backgroundColor: '#1f2937',
-                border: 'none', borderRadius: 8, color: '#ef4444', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+                border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
               }}
             >
-              <Trash2 size={18} />
-              Smazat
+              <Camera size={16} />
+              Screenshot
             </button>
-          )}
+
+            {annotations.length > 0 && (
+              <button
+                onClick={() => setAnnotations([])}
+                style={{
+                  padding: '8px 14px',
+                  backgroundColor: '#1f2937',
+                  border: 'none', borderRadius: 8, color: '#ef4444', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+                }}
+              >
+                <Trash2 size={16} />
+                Smazat
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Transcription preview */}
@@ -657,14 +859,57 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         )}
       </div>
 
-      {/* Video Controls */}
-      <div style={{ backgroundColor: '#111827', padding: '12px 16px', borderTop: '1px solid #1f2937' }}>
-        <input
-          type="range"
-          min={0} max={duration || 100} value={currentTime}
-          onChange={e => seek(parseFloat(e.target.value))}
-          style={{ width: '100%', height: 8, borderRadius: 4, appearance: 'none', backgroundColor: '#374151', cursor: 'pointer', marginBottom: 12 }}
-        />
+      {/* Video Controls with Timeline */}
+      <div style={{ backgroundColor: '#111827', padding: '12px 16px', borderTop: '1px solid #1f2937', maxWidth: 900, margin: '0 auto' }}>
+        {/* Timeline with markers */}
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type="range"
+            min={0} max={duration || 100} value={currentTime} step={0.1}
+            onChange={e => seek(parseFloat(e.target.value))}
+            style={{ width: '100%', height: 8, borderRadius: 4, appearance: 'none', backgroundColor: '#374151', cursor: 'pointer' }}
+          />
+          {/* Markers on timeline */}
+          {duration > 0 && timelineMarkers.map(marker => (
+            <button
+              key={`${marker.type}-${marker.id}`}
+              onClick={() => seek(marker.time)}
+              title={marker.label || `${marker.type} @ ${formatTime(marker.time)}`}
+              style={{
+                position: 'absolute',
+                left: `${(marker.time / duration) * 100}%`,
+                top: -4,
+                transform: 'translateX(-50%)',
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                border: '2px solid #111827',
+                cursor: 'pointer',
+                backgroundColor: marker.type === 'comment' ? '#22c55e' :
+                               marker.type === 'screenshot' ? '#f97316' : '#a855f7',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Marker legend */}
+        {timelineMarkers.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12, fontSize: 11, color: '#9ca3af' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
+              Komentář
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#f97316' }} />
+              Screenshot
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#a855f7' }} />
+              Hlasový komentář
+            </span>
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => seek(currentTime - 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
@@ -680,7 +925,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             <button onClick={() => seek(currentTime + 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
               <SkipForward size={20} />
             </button>
-            <span style={{ color: '#9ca3af', fontSize: 13 }}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+            <span style={{ color: '#9ca3af', fontSize: 13, fontFamily: 'monospace', minWidth: 90 }}>
+              {formatTime(currentTime, true)} / {formatTime(duration)}
+            </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <select
@@ -707,30 +954,51 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
       {/* Screenshots Section */}
       {screenshots.length > 0 && (
-        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📸 Screenshoty ({screenshots.length})</h3>
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8 }}>
+        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937', maxWidth: 900, margin: '0 auto' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ImageIcon size={16} style={{ color: '#f97316' }} />
+            Screenshoty ({screenshots.length})
+          </h3>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
             {screenshots.map(s => (
               <div key={s.id} style={{ position: 'relative', flexShrink: 0 }}>
                 <img
                   src={s.dataUrl}
                   alt={`Screenshot ${formatTime(s.time)}`}
                   onClick={() => seek(s.time)}
-                  style={{ height: 70, borderRadius: 6, cursor: 'pointer' }}
+                  style={{ height: 80, borderRadius: 8, cursor: 'pointer' }}
                 />
-                <button
-                  onClick={() => handleDeleteScreenshot(s.id)}
-                  style={{
-                    position: 'absolute', top: 2, right: 2, width: 18, height: 18,
-                    borderRadius: '50%', border: 'none', backgroundColor: 'rgba(0,0,0,0.7)',
-                    color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <X size={10} />
-                </button>
+                <div style={{
+                  position: 'absolute', top: 4, right: 4,
+                  display: 'flex', gap: 4,
+                }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); shareScreenshot(s); }}
+                    style={{
+                      width: 24, height: 24,
+                      borderRadius: '50%', border: 'none', backgroundColor: 'rgba(37, 99, 235, 0.9)',
+                      color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    title="Sdílet"
+                  >
+                    <Share2 size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteScreenshot(s.id); }}
+                    style={{
+                      width: 24, height: 24,
+                      borderRadius: '50%', border: 'none', backgroundColor: 'rgba(0,0,0,0.7)',
+                      color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    title="Smazat"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
                 <span style={{
-                  position: 'absolute', bottom: 2, left: 2,
-                  fontSize: 9, backgroundColor: 'rgba(0,0,0,0.7)', padding: '1px 4px', borderRadius: 3,
+                  position: 'absolute', bottom: 4, left: 4,
+                  fontSize: 10, backgroundColor: 'rgba(0,0,0,0.8)', padding: '2px 6px', borderRadius: 4,
+                  fontWeight: 500,
                 }}>{formatTime(s.time)}</span>
               </div>
             ))}
@@ -740,44 +1008,59 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
       {/* Audio Comments Section */}
       {audioComments.length > 0 && (
-        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🎙️ Hlasové komentáře ({audioComments.length})</h3>
+        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937', maxWidth: 900, margin: '0 auto' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Mic size={16} style={{ color: '#a855f7' }} />
+            Hlasové komentáře ({audioComments.length})
+          </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {audioComments.map(a => (
               <div key={a.id} style={{
-                backgroundColor: '#1f2937', padding: 10, borderRadius: 8,
-                display: 'flex', alignItems: 'flex-start', gap: 10,
+                backgroundColor: '#1f2937', padding: 12, borderRadius: 8,
+                display: 'flex', alignItems: 'flex-start', gap: 12,
               }}>
                 <button
                   onClick={() => seek(a.time)}
                   style={{
-                    width: 36, height: 36, borderRadius: '50%',
-                    backgroundColor: '#2563eb', border: 'none', color: 'white',
+                    width: 40, height: 40, borderRadius: '50%',
+                    backgroundColor: '#a855f7', border: 'none', color: 'white',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}
                 >
-                  <PlayCircle size={18} />
+                  <PlayCircle size={20} />
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: '#a855f7', marginBottom: 4, fontWeight: 500 }}>
                     {formatTime(a.time)} • {a.duration}s
                   </div>
-                  {(a as any).transcript && (
-                    <p style={{ fontSize: 13, margin: 0, marginBottom: 6 }}>{(a as any).transcript}</p>
+                  {a.transcript ? (
+                    <div style={{
+                      backgroundColor: '#374151',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      marginBottom: 8,
+                      borderLeft: '3px solid #a855f7',
+                    }}>
+                      <p style={{ fontSize: 14, margin: 0, lineHeight: 1.5 }}>"{a.transcript}"</p>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', marginBottom: 8 }}>
+                      (bez přepisu)
+                    </p>
                   )}
                   {a.blobUrl && (
-                    <audio src={a.blobUrl} controls style={{ width: '100%', height: 32 }} />
+                    <audio src={a.blobUrl} controls style={{ width: '100%', height: 36 }} />
                   )}
                 </div>
                 <button
                   onClick={() => handleDeleteAudio(a.id)}
                   style={{
-                    padding: 4, backgroundColor: 'transparent', border: 'none',
+                    padding: 6, backgroundColor: 'transparent', border: 'none',
                     color: '#6b7280', cursor: 'pointer',
                   }}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={16} />
                 </button>
               </div>
             ))}
@@ -786,8 +1069,11 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       )}
 
       {/* Text Comments Section */}
-      <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>💬 Komentáře ({comments.length})</h3>
+      <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937', maxWidth: 900, margin: '0 auto' }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <MessageSquare size={16} style={{ color: '#22c55e' }} />
+          Komentáře ({comments.length})
+        </h3>
 
         {/* Add comment */}
         <div style={{ marginBottom: 12 }}>
@@ -883,7 +1169,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(c.time)}</span>
+                  <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 500 }}>{formatTime(c.time)}</span>
                   <button
                     onClick={e => { e.stopPropagation(); handleDeleteComment(c.id); }}
                     style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 2 }}
@@ -961,9 +1247,16 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
 function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, width: number, height: number) {
   const { type, points, color, strokeWidth, playerName } = annotation;
+
+  // Apply shadow for better visibility
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = strokeWidth;
+  ctx.lineWidth = strokeWidth * 1.5; // Make strokes thicker
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const toCanvas = (p: Point) => ({ x: p.x * width, y: p.y * height });
@@ -980,10 +1273,11 @@ function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, w
       if (points.length < 2) return;
       const start = toCanvas(points[0]), end = toCanvas(points[1]);
       const angle = Math.atan2(end.y - start.y, end.x - start.x);
+      const arrowHeadSize = Math.max(30, strokeWidth * 4); // Bigger arrow heads
       ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(end.x, end.y);
-      ctx.lineTo(end.x - 20 * Math.cos(angle - Math.PI / 6), end.y - 20 * Math.sin(angle - Math.PI / 6));
-      ctx.lineTo(end.x - 20 * Math.cos(angle + Math.PI / 6), end.y - 20 * Math.sin(angle + Math.PI / 6));
+      ctx.lineTo(end.x - arrowHeadSize * Math.cos(angle - Math.PI / 6), end.y - arrowHeadSize * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(end.x - arrowHeadSize * Math.cos(angle + Math.PI / 6), end.y - arrowHeadSize * Math.sin(angle + Math.PI / 6));
       ctx.closePath(); ctx.fill();
       break;
     case 'circle':
@@ -1001,16 +1295,27 @@ function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, w
       if (points.length < 1) return;
       const pm = toCanvas(points[0]);
       ctx.beginPath();
-      ctx.arc(pm.x, pm.y, 25, 0, Math.PI * 2);
+      ctx.arc(pm.x, pm.y, 35, 0, Math.PI * 2); // Bigger marker
       ctx.fillStyle = color;
       ctx.fill();
+      // White border
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
       if (playerName) {
+        ctx.shadowColor = 'transparent';
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = 'bold 18px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(playerName.substring(0, 3).toUpperCase(), pm.x, pm.y);
       }
       break;
   }
+
+  // Reset shadow
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 }

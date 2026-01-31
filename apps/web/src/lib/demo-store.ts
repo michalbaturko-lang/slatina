@@ -37,6 +37,7 @@ export interface AudioComment {
   time: number;
   duration: number;
   blobUrl?: string;
+  transcript?: string;
   playerIds?: string[];
   createdAt: number;
 }

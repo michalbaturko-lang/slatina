@@ -20,6 +20,7 @@ export interface Player {
   number?: number;
   position?: string;
   active: boolean;
+  photoUrl?: string;
 }
 
 export interface CoachComment {
@@ -101,11 +102,40 @@ const DEFAULT_TEAM: TeamConfig = {
 };
 
 // Trenéři SK Slatina
-export const COACHES = [
+export interface Coach {
+  id: string;
+  name: string;
+  role: string;
+  photoUrl?: string;
+}
+
+const COACHES_KEY = 'slatina-coaches';
+
+const DEFAULT_COACHES: Coach[] = [
   { id: 'ales', name: 'Aleš', role: 'Hlavní trenér' },
   { id: 'jirka', name: 'Jirka', role: 'Asistent' },
   { id: 'david', name: 'David', role: 'Asistent' },
 ];
+
+export function getCoaches(): Coach[] {
+  if (typeof window === 'undefined') return DEFAULT_COACHES;
+  const data = localStorage.getItem(COACHES_KEY);
+  return data ? JSON.parse(data) : DEFAULT_COACHES;
+}
+
+export function updateCoach(id: string, updates: Partial<Coach>): Coach | null {
+  const coaches = getCoaches();
+  const index = coaches.findIndex(c => c.id === id);
+  if (index === -1) return null;
+  coaches[index] = { ...coaches[index], ...updates };
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(COACHES_KEY, JSON.stringify(coaches));
+  }
+  return coaches[index];
+}
+
+// Legacy export for compatibility
+export const COACHES = DEFAULT_COACHES;
 
 // Soupeři - týmy proti kterým hrajeme
 export const OPPONENT_TEAMS = [
