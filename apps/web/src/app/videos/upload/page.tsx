@@ -13,11 +13,8 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import {
-  addVideo,
-  saveVideoBlob,
-  simulateAIAnalysis,
-} from '@/lib/demo-store';
+import { createVideo } from '@/lib/cloud-store';
+import { uploadFile } from '@/lib/upload';
 import { getTeam, COACHES, OPPONENT_TEAMS } from '@/lib/team-store';
 
 interface UploadProgress {
@@ -26,7 +23,7 @@ interface UploadProgress {
   percentage: number;
 }
 
-type UploadStatus = 'idle' | 'uploading' | 'processing' | 'analyzing' | 'complete' | 'error';
+type UploadStatus = 'idle' | 'uploading' | 'processing' | 'complete' | 'error';
 
 // Dnešní datum ve formátu YYYY-MM-DD
 const getTodayDate = () => new Date().toISOString().split('T')[0];
@@ -48,7 +45,6 @@ export default function UploadPage() {
   const [scoreAway, setScoreAway] = useState<string>('');
   const [matchDate, setMatchDate] = useState(getTodayDate());
   const [videoType, setVideoType] = useState<'match' | 'training'>('match');
-  const [enableAI, setEnableAI] = useState(true);
 
   // Team info
   const team = typeof window !== 'undefined' ? getTeam() : null;
@@ -127,50 +123,40 @@ export default function UploadPage() {
     setError(null);
 
     try {
-      // Simulate upload progress
+      // Upload video to R2 with progress simulation
       const totalSize = selectedFile.size;
       let uploaded = 0;
       const chunkSize = totalSize / 10;
 
-      const uploadSimulation = async () => {
-        while (uploaded < totalSize) {
-          await new Promise(r => setTimeout(r, 200));
-          uploaded = Math.min(uploaded + chunkSize, totalSize);
-          setProgress({
-            loaded: uploaded,
-            total: totalSize,
-            percentage: Math.round((uploaded / totalSize) * 100),
-          });
-        }
-      };
+      // Start actual upload in background
+      const uploadPromise = uploadFile(selectedFile, 'videos', selectedFile.name);
 
-      await uploadSimulation();
+      // Simulate progress while uploading
+      const progressInterval = setInterval(() => {
+        uploaded = Math.min(uploaded + chunkSize, totalSize * 0.9);
+        setProgress({
+          loaded: uploaded,
+          total: totalSize,
+          percentage: Math.round((uploaded / totalSize) * 100),
+        });
+      }, 500);
+
+      // Wait for actual upload to complete
+      const { publicUrl } = await uploadPromise;
+
+      clearInterval(progressInterval);
+      setProgress({ loaded: totalSize, total: totalSize, percentage: 100 });
 
       setStatus('processing');
 
-      // Create video record
-      const newVideo = addVideo({
+      // Create video record in Supabase
+      const newVideo = await createVideo({
         title,
-        opponent: opponent || undefined,
-        scoreHome: scoreHome !== '' ? parseInt(scoreHome) : undefined,
-        scoreAway: scoreAway !== '' ? parseInt(scoreAway) : undefined,
-        date: matchDate,
-        duration: videoDuration,
-        sport: 'football', // vždy fotbal pro SK Slatina
-        status: 'processing',
-        uploadProgress: 100,
+        file_url: publicUrl,
+        thumbnail_url: null,
+        duration: videoDuration || null,
+        match_id: null,
       });
-
-      // Save video blob to IndexedDB
-      await saveVideoBlob(newVideo.id, selectedFile);
-
-      if (enableAI) {
-        setStatus('analyzing');
-        // Simulate AI analysis
-        await simulateAIAnalysis(newVideo.id, videoDuration, (aiProgress) => {
-          setProgress(prev => ({ ...prev, percentage: aiProgress }));
-        });
-      }
 
       setStatus('complete');
       setTimeout(() => {
@@ -220,11 +206,10 @@ export default function UploadPage() {
           </div>
         </div>
 
-        {/* Demo notice */}
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 mb-6">
-          <p className="text-xs text-gray-400">
-            Video se ukládá lokálně ve vašem prohlížeči. AI analýza detekuje situace jako
-            chumel hráčů, chybějící nabídky, ztráta soupeře a další.
+        {/* Cloud storage notice */}
+        <div className="bg-green-900/30 border border-green-700 rounded-lg p-3 mb-6">
+          <p className="text-xs text-green-300">
+            Video se nahrává do cloudového úložiště a bude dostupné ze všech zařízení.
           </p>
         </div>
 
@@ -298,13 +283,7 @@ export default function UploadPage() {
               {status === 'processing' && (
                 <>
                   <Loader2 className="w-6 h-6 text-yellow-400 animate-spin" />
-                  <span>Zpracování videa...</span>
-                </>
-              )}
-              {status === 'analyzing' && (
-                <>
-                  <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
-                  <span>AI analýza... {progress.percentage}%</span>
+                  <span>Ukládání do databáze...</span>
                 </>
               )}
               {status === 'complete' && (
@@ -321,12 +300,10 @@ export default function UploadPage() {
               )}
             </div>
 
-            {(status === 'uploading' || status === 'analyzing') && (
+            {status === 'uploading' && (
               <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all duration-300 ${
-                    status === 'analyzing' ? 'bg-purple-500' : 'bg-blue-500'
-                  }`}
+                  className="h-full transition-all duration-300 bg-blue-500"
                   style={{ width: `${progress.percentage}%` }}
                 />
               </div>
@@ -469,20 +446,6 @@ export default function UploadPage() {
                 Trénink
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="enableAI"
-              checked={enableAI}
-              onChange={(e) => setEnableAI(e.target.checked)}
-              className="w-5 h-5 rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-blue-500"
-              disabled={status !== 'idle'}
-            />
-            <label htmlFor="enableAI" className="text-sm">
-              Povolit AI analýzu (automatická detekce situací)
-            </label>
           </div>
 
           <div className="flex justify-end gap-4 pt-4 pb-32">

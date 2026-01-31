@@ -32,27 +32,22 @@ import {
 } from 'lucide-react';
 import {
   getVideo,
-  getVideoBlob,
   updateVideo,
-  addScreenshot,
-  deleteScreenshot,
-  addAudioComment,
-  deleteAudioComment,
-  DemoVideo,
+  getScreenshots,
+  createScreenshot,
+  getAudioComments,
+  createAudioComment,
+  getComments,
+  createComment,
+  deleteComment as deleteCommentCloud,
+  getPlayers,
+  Video,
   Screenshot,
   AudioComment,
-} from '@/lib/demo-store';
-import {
-  getTeam,
-  getComments,
-  addComment,
-  deleteComment,
-  getPlayers,
-  searchPlayers,
-  getPlayersByIds,
-  CoachComment,
+  Comment,
   Player,
-} from '@/lib/team-store';
+} from '@/lib/cloud-store';
+import { uploadFile, uploadDataUrl } from '@/lib/upload';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'playerMarker';
 
@@ -82,8 +77,7 @@ const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'
 const STROKE_WIDTHS = [4, 6, 8, 12];
 
 export default function VideoDetailPage({ params }: { params: { id: string } }) {
-  const [video, setVideo] = useState<DemoVideo | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,8 +117,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [audioComments, setAudioComments] = useState<AudioComment[]>([]);
 
   // Text comments
-  const [comments, setComments] = useState<CoachComment[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
@@ -132,7 +127,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   // Responsive
   const [isMobile, setIsMobile] = useState(false);
 
-  const team = typeof window !== 'undefined' ? getTeam() : null;
   const isDrawingMode = selectedTool !== 'select';
 
   // Check if mobile
@@ -183,28 +177,34 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   useEffect(() => {
     const loadVideoData = async () => {
       try {
-        const videoData = getVideo(params.id);
+        const videoData = await getVideo(params.id);
         if (!videoData) {
           setError('Video nebylo nalezeno');
           setLoading(false);
           return;
         }
         setVideo(videoData);
-        setScreenshots(videoData.screenshots || []);
-        setAudioComments(videoData.audioComments || []);
-        setComments(getComments(params.id));
-        const blob = await getVideoBlob(params.id);
-        if (blob) {
-          setVideoUrl(URL.createObjectURL(blob));
-        }
+
+        // Load related data
+        const [screenshotsData, audioData, commentsData, playersData] = await Promise.all([
+          getScreenshots(params.id),
+          getAudioComments(params.id),
+          getComments(params.id),
+          getPlayers(),
+        ]);
+
+        setScreenshots(screenshotsData);
+        setAudioComments(audioData);
+        setComments(commentsData);
+        setAllPlayers(playersData);
         setLoading(false);
-      } catch {
+      } catch (err) {
+        console.error('Error loading video:', err);
         setError('Chyba při načítání videa');
         setLoading(false);
       }
     };
     loadVideoData();
-    return () => { if (videoUrl) URL.revokeObjectURL(videoUrl); };
   }, [params.id]);
 
   const togglePlay = useCallback(() => {
@@ -352,31 +352,29 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         }
 
         recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-        recorder.onstop = () => {
+        recorder.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const audioUrl = URL.createObjectURL(audioBlob);
           const finalTranscript = transcriptRef.current;
           const recordingDuration = Math.round((Date.now() - recordStartTime) / 1000);
 
           if (video) {
-            const newAudio = addAudioComment(video.id, {
-              time: startTime,
-              duration: recordingDuration,
-              blobUrl: audioUrl,
-            });
-            if (newAudio) {
-              // Create audio with transcript
-              const audioWithTranscript: AudioComment = { ...newAudio, transcript: finalTranscript };
-              setAudioComments(prev => [...prev, audioWithTranscript]);
+            try {
+              // Upload audio to R2
+              const { publicUrl } = await uploadFile(audioBlob, 'audio', `audio-${Date.now()}.webm`);
 
-              // Update in storage with transcript
-              const updatedVideo = getVideo(video.id);
-              if (updatedVideo) {
-                const updatedAudioComments = updatedVideo.audioComments.map(a =>
-                  a.id === newAudio.id ? { ...a, transcript: finalTranscript } : a
-                );
-                updateVideo(video.id, { audioComments: updatedAudioComments });
-              }
+              // Save to Supabase
+              const newAudio = await createAudioComment({
+                video_id: video.id,
+                time: startTime,
+                duration: recordingDuration,
+                audio_url: publicUrl,
+                transcript: finalTranscript || null,
+              });
+
+              setAudioComments(prev => [...prev, newAudio]);
+            } catch (err) {
+              console.error('Failed to save audio:', err);
+              alert('Nepodařilo se uložit hlasový komentář');
             }
           }
           stream.getTracks().forEach(track => track.stop());
@@ -396,7 +394,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   }, [isRecording, currentTime, video]);
 
   // Screenshot
-  const captureScreenshot = useCallback(() => {
+  const captureScreenshot = useCallback(async () => {
     const videoEl = videoRef.current;
     const annotationCanvas = canvasRef.current;
     if (!videoEl || !video) {
@@ -419,16 +417,27 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       }
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      const newScreenshot = addScreenshot(video.id, { time: currentTime, dataUrl });
 
-      if (newScreenshot) {
-        setScreenshots(prev => [...prev, newScreenshot]);
-        if (!video.thumbnail) {
-          updateVideo(video.id, { thumbnail: dataUrl });
-          setVideo(prev => prev ? { ...prev, thumbnail: dataUrl } : null);
-        }
-        alert('Screenshot uložen!');
+      // Upload to R2
+      const { publicUrl } = await uploadDataUrl(dataUrl, 'screenshots', `screenshot-${Date.now()}.jpg`);
+
+      // Save to Supabase
+      const newScreenshot = await createScreenshot({
+        video_id: video.id,
+        time: currentTime,
+        image_url: publicUrl,
+        annotations_json: null,
+      });
+
+      setScreenshots(prev => [...prev, newScreenshot]);
+
+      // Set as thumbnail if none exists
+      if (!video.thumbnail_url) {
+        await updateVideo(video.id, { thumbnail_url: publicUrl });
+        setVideo(prev => prev ? { ...prev, thumbnail_url: publicUrl } : null);
       }
+
+      alert('Screenshot uložen!');
     } catch (err) {
       console.error('Screenshot failed:', err);
       alert('Nepodařilo se vytvořit screenshot');
@@ -436,65 +445,53 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   }, [video, currentTime]);
 
   const handleDeleteScreenshot = useCallback((id: string) => {
-    if (!video) return;
-    deleteScreenshot(video.id, id);
+    // Note: Delete from cloud not yet implemented
     setScreenshots(prev => prev.filter(s => s.id !== id));
-  }, [video]);
+  }, []);
 
   // Share screenshot using native Share API
   const shareScreenshot = useCallback(async (screenshot: Screenshot) => {
     try {
-      // Convert dataUrl to blob
-      const response = await fetch(screenshot.dataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `screenshot-${formatTime(screenshot.time)}.jpg`, { type: 'image/jpeg' });
-
-      if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Screenshot v ${formatTime(screenshot.time)}`,
-          text: video?.title || 'Video screenshot',
-        });
-      } else {
-        // Fallback - download the image
-        const link = document.createElement('a');
-        link.href = screenshot.dataUrl;
-        link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
-        link.click();
-      }
+      // Open image in new tab or download
+      const link = document.createElement('a');
+      link.href = screenshot.image_url;
+      link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
+      link.target = '_blank';
+      link.click();
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        console.error('Share failed:', err);
-        // Fallback - download
-        const link = document.createElement('a');
-        link.href = screenshot.dataUrl;
-        link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
-        link.click();
-      }
+      console.error('Share failed:', err);
     }
-  }, [video]);
+  }, []);
 
   const handleDeleteAudio = useCallback((id: string) => {
-    if (!video) return;
-    deleteAudioComment(video.id, id);
+    // Note: Delete from cloud not yet implemented
     setAudioComments(prev => prev.filter(a => a.id !== id));
-  }, [video]);
+  }, []);
 
   // Comments
-  const handleAddComment = useCallback(() => {
+  const handleAddComment = useCallback(async () => {
     if (!newComment.trim() || !video) return;
-    const comment = addComment({
-      videoId: video.id, time: currentTime, text: newComment.trim(),
-      category: 'note', playerIds: selectedPlayers.map(p => p.id),
-    });
-    setComments(prev => [...prev, comment]);
-    setNewComment('');
-    setSelectedPlayers([]);
-  }, [newComment, video, currentTime, selectedPlayers]);
+    try {
+      const comment = await createComment({
+        video_id: video.id,
+        time: currentTime,
+        text: newComment.trim(),
+      });
+      setComments(prev => [...prev, comment]);
+      setNewComment('');
+      setSelectedPlayers([]);
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    }
+  }, [newComment, video, currentTime]);
 
-  const handleDeleteComment = useCallback((id: string) => {
-    deleteComment(id);
-    setComments(prev => prev.filter(c => c.id !== id));
+  const handleDeleteComment = useCallback(async (id: string) => {
+    try {
+      await deleteCommentCloud(id);
+      setComments(prev => prev.filter(c => c.id !== id));
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+    }
   }, []);
 
   const addPlayerTag = useCallback((player: Player) => {
@@ -505,32 +502,25 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     setShowPlayerDropdown(false);
   }, [selectedPlayers]);
 
+  // Filter players based on search
+  const filteredPlayers = allPlayers.filter(p =>
+    p.name.toLowerCase().includes(playerSearch.toLowerCase()) ||
+    (p.number && p.number.toString().includes(playerSearch))
+  );
+
   // Share video summary with all annotations
   const shareVideoSummary = useCallback(async () => {
     if (!video) return;
 
     // Build summary text
     let summary = `📹 ${video.title}\n`;
-    summary += `📅 ${new Date(video.date).toLocaleDateString('cs-CZ')}\n`;
-    if (video.opponent) {
-      summary += `⚽ vs. ${video.opponent}`;
-      if (video.scoreHome !== undefined && video.scoreAway !== undefined) {
-        summary += ` (${video.scoreHome}:${video.scoreAway})`;
-      }
-      summary += '\n';
-    }
-    summary += '\n';
+    summary += `📅 ${new Date(video.created_at).toLocaleDateString('cs-CZ')}\n\n`;
 
     // Add comments
     if (comments.length > 0) {
       summary += '💬 KOMENTÁŘE:\n';
       comments.sort((a, b) => a.time - b.time).forEach(c => {
-        const players = c.playerIds?.length > 0
-          ? getPlayersByIds(c.playerIds).map(p => `#${p.number} ${p.name}`).join(', ')
-          : '';
-        summary += `  [${formatTime(c.time)}] ${c.text}`;
-        if (players) summary += ` (${players})`;
-        summary += '\n';
+        summary += `  [${formatTime(c.time)}] ${c.text}\n`;
       });
       summary += '\n';
     }
@@ -571,7 +561,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
-        // Fallback - copy to clipboard
         try {
           await navigator.clipboard.writeText(summary);
           alert('Shrnutí zkopírováno do schránky!');
@@ -618,8 +607,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     );
   }
 
-  const scoreDisplay = video.scoreHome !== undefined && video.scoreAway !== undefined
-    ? `${video.scoreHome}:${video.scoreAway}` : null;
 
   return (
     <div style={{
@@ -645,9 +632,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{video.title}</h1>
             <p style={{ fontSize: 11, color: '#9ca3af' }}>
-              {new Date(video.date).toLocaleDateString('cs-CZ')}
-              {video.opponent && ` • vs. ${video.opponent}`}
-              {scoreDisplay && ` (${scoreDisplay})`}
+              {new Date(video.created_at).toLocaleDateString('cs-CZ')}
             </p>
           </div>
           <button
@@ -684,16 +669,17 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           overflow: 'hidden',
           touchAction: isDrawingMode ? 'none' : 'auto',
         }}>
-          {videoUrl ? (
+          {video.file_url ? (
             <video
               ref={videoRef}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              src={videoUrl}
+              src={video.file_url}
               onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               onSeeked={() => setCurrentTime(videoRef.current?.currentTime || 0)}
               playsInline
+              crossOrigin="anonymous"
             />
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -963,7 +949,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             {screenshots.map(s => (
               <div key={s.id} style={{ position: 'relative', flexShrink: 0 }}>
                 <img
-                  src={s.dataUrl}
+                  src={s.image_url}
                   alt={`Screenshot ${formatTime(s.time)}`}
                   onClick={() => seek(s.time)}
                   style={{ height: 80, borderRadius: 8, cursor: 'pointer' }}
@@ -1032,7 +1018,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: '#a855f7', marginBottom: 4, fontWeight: 500 }}>
-                    {formatTime(a.time)} • {a.duration}s
+                    {formatTime(a.time)} {a.duration && `• ${a.duration}s`}
                   </div>
                   {a.transcript ? (
                     <div style={{
@@ -1049,8 +1035,8 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                       (bez přepisu)
                     </p>
                   )}
-                  {a.blobUrl && (
-                    <audio src={a.blobUrl} controls style={{ width: '100%', height: 36 }} />
+                  {a.audio_url && (
+                    <audio src={a.audio_url} controls style={{ width: '100%', height: 36 }} />
                   )}
                 </div>
                 <button
@@ -1077,54 +1063,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
         {/* Add comment */}
         <div style={{ marginBottom: 12 }}>
-          {selectedPlayers.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-              {selectedPlayers.map(p => (
-                <span key={p.id} style={{
-                  fontSize: 11, padding: '3px 8px', borderRadius: 12,
-                  backgroundColor: 'rgba(59, 130, 246, 0.3)', color: '#60a5fa',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}>
-                  {p.number ? `#${p.number} ` : ''}{p.name}
-                  <button onClick={() => setSelectedPlayers(prev => prev.filter(x => x.id !== p.id))}
-                    style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0 }}>
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div style={{ position: 'relative', marginBottom: 8 }}>
-            <input
-              type="text"
-              value={playerSearch}
-              onChange={e => { setPlayerSearch(e.target.value); setShowPlayerDropdown(true); }}
-              onFocus={() => setShowPlayerDropdown(true)}
-              placeholder="@ Označit hráče..."
-              style={{
-                width: '100%', backgroundColor: '#1f2937', border: 'none',
-                borderRadius: 6, padding: '8px 10px', color: 'white', fontSize: 13,
-              }}
-            />
-            {showPlayerDropdown && (
-              <div style={{
-                position: 'absolute', bottom: '100%', left: 0, right: 0,
-                backgroundColor: '#1f2937', borderRadius: 6, marginBottom: 4,
-                maxHeight: 150, overflow: 'auto', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
-              }}>
-                {searchPlayers(playerSearch).filter(p => !selectedPlayers.find(sp => sp.id === p.id)).slice(0, 6).map(p => (
-                  <button key={p.id} onClick={() => addPlayerTag(p)} style={{
-                    width: '100%', padding: '10px 12px', backgroundColor: 'transparent',
-                    border: 'none', color: 'white', textAlign: 'left', cursor: 'pointer', fontSize: 13,
-                  }}>
-                    {p.number ? `#${p.number} ` : ''}{p.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               type="text"
@@ -1136,7 +1074,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 borderRadius: 6, padding: '10px 12px', color: 'white', fontSize: 14,
               }}
               onKeyDown={e => e.key === 'Enter' && handleAddComment()}
-              onFocus={() => setShowPlayerDropdown(false)}
             />
             <button
               onClick={handleAddComment}
@@ -1178,18 +1115,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                   </button>
                 </div>
                 <p style={{ fontSize: 13, margin: 0 }}>{c.text}</p>
-                {c.playerIds?.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                    {getPlayersByIds(c.playerIds).map(p => (
-                      <span key={p.id} style={{
-                        fontSize: 10, padding: '2px 6px', borderRadius: 10,
-                        backgroundColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa',
-                      }}>
-                        {p.number ? `#${p.number} ` : ''}{p.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -1204,7 +1129,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 320, maxHeight: '60vh', overflow: 'auto' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Vyber hráče</h3>
-            {getPlayers().filter(p => p.active).map(player => (
+            {allPlayers.filter(p => p.active).map(player => (
               <button
                 key={player.id}
                 onClick={() => addPlayerMarker(player)}

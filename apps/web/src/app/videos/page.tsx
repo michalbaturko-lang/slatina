@@ -4,65 +4,58 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  Video,
+  Video as VideoIcon,
   Upload,
   Play,
   Calendar,
   Clock,
-  Brain,
-  Filter,
   Search,
   Grid,
   List,
   MoreVertical,
   Trash2,
-  Download,
-  Share2,
   Loader2,
   Users,
   Trophy,
 } from 'lucide-react';
-import { getVideos, deleteVideo, DemoVideo, getVideoBlob } from '@/lib/demo-store';
-import { OPPONENT_TEAMS } from '@/lib/team-store';
+import { getVideos, deleteVideo, Video } from '@/lib/cloud-store';
 
 export default function VideosPage() {
-  const [videos, setVideos] = useState<DemoVideo[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterOpponent, setFilterOpponent] = useState<string>('all');
 
   useEffect(() => {
     loadVideos();
   }, []);
 
-  const loadVideos = () => {
-    const storedVideos = getVideos();
-    setVideos(storedVideos);
-    setLoading(false);
+  const loadVideos = async () => {
+    try {
+      const storedVideos = await getVideos();
+      setVideos(storedVideos);
+    } catch (error) {
+      console.error('Failed to load videos:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteVideo = (id: string) => {
+  const handleDeleteVideo = async (id: string) => {
     if (confirm('Opravdu chcete smazat toto video?')) {
-      deleteVideo(id);
-      loadVideos();
+      try {
+        await deleteVideo(id);
+        await loadVideos();
+      } catch (error) {
+        console.error('Failed to delete video:', error);
+      }
     }
   };
 
   const filteredVideos = videos.filter(video => {
-    const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         video.opponent?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || video.status === filterStatus;
-    const matchesOpponent = filterOpponent === 'all' || video.opponent === filterOpponent;
-    return matchesSearch && matchesStatus && matchesOpponent;
+    const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
   });
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   if (loading) {
     return (
@@ -114,14 +107,6 @@ export default function VideosPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Demo notice */}
-        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
-          <p className="text-sm text-blue-300">
-            <strong>Demo verze:</strong> Videa jsou uložena lokálně ve vašem prohlížeči.
-            Nahrajte vlastní video pro testování.
-          </p>
-        </div>
-
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           {/* Search */}
@@ -134,35 +119,6 @@ export default function VideosPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-blue-500 transition"
             />
-          </div>
-
-          {/* Opponent filter */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-400" />
-            <select
-              value={filterOpponent}
-              onChange={(e) => setFilterOpponent(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-            >
-              <option value="all">Všichni soupeři</option>
-              {OPPONENT_TEAMS.map(team => (
-                <option key={team.id} value={team.name}>{team.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status filter */}
-          <div className="flex items-center gap-2">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-            >
-              <option value="all">Všechny stavy</option>
-              <option value="ready">Připravené</option>
-              <option value="processing">Zpracovávají se</option>
-              <option value="uploading">Nahrávají se</option>
-            </select>
           </div>
 
           {/* View mode */}
@@ -185,7 +141,7 @@ export default function VideosPage() {
         {/* Videos */}
         {filteredVideos.length === 0 ? (
           <div className="text-center py-12">
-            <Video className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+            <VideoIcon className="w-12 h-12 mx-auto mb-4 text-gray-600" />
             <p className="text-gray-400 mb-4">
               {videos.length === 0 ? 'Zatím nemáte žádná videa' : 'Žádná videa nenalezena'}
             </p>
@@ -215,7 +171,7 @@ export default function VideosPage() {
   );
 }
 
-function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: string) => void }) {
+function VideoCard({ video, onDelete }: { video: Video; onDelete: (id: string) => void }) {
   const [showMenu, setShowMenu] = useState(false);
 
   const formatDuration = (seconds: number): string => {
@@ -224,72 +180,31 @@ function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: strin
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const hasScore = video.scoreHome !== undefined && video.scoreAway !== undefined;
-  const isWin = hasScore && video.scoreHome! > video.scoreAway!;
-  const isLoss = hasScore && video.scoreHome! < video.scoreAway!;
-  const isDraw = hasScore && video.scoreHome === video.scoreAway;
-
-  // Get thumbnail from first screenshot or use default
-  const thumbnail = video.thumbnail || (video.screenshots && video.screenshots.length > 0 ? video.screenshots[0].dataUrl : null);
-
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-gray-600 transition group">
       {/* Thumbnail */}
       <Link href={`/videos/${video.id}`} className="block">
         <div className="aspect-video bg-gray-700 relative overflow-hidden">
           {/* Background thumbnail */}
-          {thumbnail ? (
+          {video.thumbnail_url && (
             <img
-              src={thumbnail}
+              src={video.thumbnail_url}
               alt={video.title}
               className="absolute inset-0 w-full h-full object-cover"
             />
-          ) : null}
-
-          {/* Score overlay */}
-          {hasScore && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className={`px-6 py-3 rounded-xl backdrop-blur-sm ${
-                isWin ? 'bg-green-600/80' :
-                isLoss ? 'bg-red-600/80' :
-                'bg-yellow-600/80'
-              }`}>
-                <span className="text-4xl font-bold text-white drop-shadow-lg">
-                  {video.scoreHome}:{video.scoreAway}
-                </span>
-              </div>
-            </div>
           )}
 
-          {/* Play button (smaller when score is shown) */}
-          {!hasScore && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center group-hover:bg-blue-600/80 transition">
-                <Play className="w-6 h-6 text-white ml-1" />
-              </div>
+          {/* Play button */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center group-hover:bg-blue-600/80 transition">
+              <Play className="w-6 h-6 text-white ml-1" />
             </div>
-          )}
-
-          {/* Duration */}
-          <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded text-xs">
-            {formatDuration(video.duration)}
           </div>
 
-          {/* Status badge */}
-          {video.status !== 'ready' && (
-            <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs ${
-              video.status === 'processing' ? 'bg-yellow-600' :
-              video.status === 'uploading' ? 'bg-blue-600' : 'bg-red-600'
-            }`}>
-              {video.status === 'processing' ? 'Zpracovává se...' :
-               video.status === 'uploading' ? 'Nahrává se...' : 'Chyba'}
-            </div>
-          )}
-
-          {/* Screenshot count */}
-          {video.screenshots && video.screenshots.length > 0 && (
-            <div className="absolute top-2 right-2 bg-blue-600/90 px-2 py-1 rounded text-xs flex items-center gap-1">
-              📸 {video.screenshots.length}
+          {/* Duration */}
+          {video.duration && (
+            <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded text-xs">
+              {formatDuration(video.duration)}
             </div>
           )}
         </div>
@@ -305,21 +220,9 @@ function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: strin
             <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                {formatDate(video.date)}
+                {formatDate(video.created_at)}
               </span>
-              {video.opponent && (
-                <span>vs. {video.opponent}</span>
-              )}
             </div>
-            {hasScore && (
-              <div className={`mt-1 text-xs font-medium ${
-                isWin ? 'text-green-400' :
-                isLoss ? 'text-red-400' :
-                'text-yellow-400'
-              }`}>
-                {isWin ? '🏆 Výhra' : isLoss ? '😔 Prohra' : '🤝 Remíza'}
-              </div>
-            )}
           </Link>
 
           {/* Menu */}
@@ -358,41 +261,28 @@ function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: strin
   );
 }
 
-function VideoListItem({ video, onDelete }: { video: DemoVideo; onDelete: (id: string) => void }) {
+function VideoListItem({ video, onDelete }: { video: Video; onDelete: (id: string) => void }) {
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const hasScore = video.scoreHome !== undefined && video.scoreAway !== undefined;
-  const isWin = hasScore && video.scoreHome! > video.scoreAway!;
-  const isLoss = hasScore && video.scoreHome! < video.scoreAway!;
-  const thumbnail = video.thumbnail || (video.screenshots && video.screenshots.length > 0 ? video.screenshots[0].dataUrl : null);
-
   return (
     <div className="flex items-center gap-4 bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition">
       {/* Thumbnail */}
       <Link href={`/videos/${video.id}`} className="w-32 h-20 bg-gray-700 rounded-lg flex-shrink-0 relative block overflow-hidden">
-        {thumbnail && (
-          <img src={thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        {video.thumbnail_url && (
+          <img src={video.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
-        {hasScore ? (
-          <div className={`absolute inset-0 flex items-center justify-center ${
-            isWin ? 'bg-green-600/70' :
-            isLoss ? 'bg-red-600/70' :
-            'bg-yellow-600/70'
-          }`}>
-            <span className="text-xl font-bold text-white">{video.scoreHome}:{video.scoreAway}</span>
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Play className="w-6 h-6 text-white/50" />
-          </div>
-        )}
-        <div className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 rounded text-xs">
-          {formatDuration(video.duration)}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Play className="w-6 h-6 text-white/50" />
         </div>
+        {video.duration && (
+          <div className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 rounded text-xs">
+            {formatDuration(video.duration)}
+          </div>
+        )}
       </Link>
 
       {/* Info */}
@@ -401,43 +291,19 @@ function VideoListItem({ video, onDelete }: { video: DemoVideo; onDelete: (id: s
         <div className="flex items-center gap-4 mt-1 text-sm text-gray-400 flex-wrap">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
-            {formatDate(video.date)}
+            {formatDate(video.created_at)}
           </span>
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {formatDuration(video.duration)}
-          </span>
-          {video.opponent && (
-            <span>vs. {video.opponent}</span>
-          )}
-          {hasScore && (
-            <span className={`font-medium ${
-              isWin ? 'text-green-400' :
-              isLoss ? 'text-red-400' :
-              'text-yellow-400'
-            }`}>
-              {isWin ? '🏆 Výhra' : isLoss ? '😔 Prohra' : '🤝 Remíza'}
+          {video.duration && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDuration(video.duration)}
             </span>
           )}
         </div>
       </Link>
 
-      {/* Status */}
+      {/* Actions */}
       <div className="flex items-center gap-3">
-        {video.status !== 'ready' && (
-          <span className={`px-2 py-1 rounded text-xs ${
-            video.status === 'processing' ? 'bg-yellow-600/20 text-yellow-400' :
-            video.status === 'uploading' ? 'bg-blue-600/20 text-blue-400' : 'bg-red-600/20 text-red-400'
-          }`}>
-            {video.status === 'processing' ? 'Zpracovává se' :
-             video.status === 'uploading' ? 'Nahrává se' : 'Chyba'}
-          </span>
-        )}
-        {video.screenshots && video.screenshots.length > 0 && (
-          <span className="flex items-center gap-1 text-blue-400 text-sm">
-            📸 {video.screenshots.length}
-          </span>
-        )}
         <button
           onClick={() => onDelete(video.id)}
           className="p-2 hover:bg-gray-700 rounded-lg transition text-gray-400 hover:text-red-400"
