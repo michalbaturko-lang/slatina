@@ -1,17 +1,100 @@
 'use client';
 
 import { supabase, isProductionMode } from './supabase';
-import type {
-  Player,
-  Match,
-  Video,
-  Comment,
-  AudioComment,
-  Screenshot,
-  Goal,
-  PlayerPhoto,
-  PlayerClip
-} from './database.types';
+
+// Types matching database schema
+export interface Player {
+  id: string;
+  name: string;
+  number: number | null;
+  position: string | null;
+  photo_url: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Match {
+  id: string;
+  name: string;
+  date: string;
+  type: 'match' | 'training' | 'tournament';
+  opponent_id: string | null;
+  goals_for: number;
+  goals_against: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Video {
+  id: string;
+  title: string;
+  file_url: string;
+  thumbnail_url: string | null;
+  duration: number | null;
+  match_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Comment {
+  id: string;
+  video_id: string;
+  time: number;
+  text: string;
+  created_at: string;
+}
+
+export interface AudioComment {
+  id: string;
+  video_id: string;
+  time: number;
+  duration: number | null;
+  audio_url: string;
+  transcript: string | null;
+  created_at: string;
+}
+
+export interface Screenshot {
+  id: string;
+  video_id: string;
+  time: number;
+  image_url: string;
+  annotations_json: any;
+  created_at: string;
+}
+
+export interface Goal {
+  id: string;
+  match_id: string;
+  scorer_id: string;
+  assist_id: string | null;
+  minute: number | null;
+  video_id: string | null;
+  video_time: number | null;
+  created_at: string;
+}
+
+export interface PlayerPhoto {
+  id: string;
+  player_id: string;
+  photo_url: string;
+  match_id: string | null;
+  caption: string | null;
+  created_at: string;
+}
+
+export interface PlayerClip {
+  id: string;
+  player_id: string;
+  video_id: string;
+  start_time: number;
+  end_time: number;
+  title: string;
+  category: 'goal' | 'assist' | 'skill' | 'defense' | 'other';
+  created_at: string;
+}
 
 // ============================================
 // PLAYERS
@@ -61,12 +144,12 @@ export async function createPlayer(player: Omit<Player, 'id' | 'created_at' | 'u
 
   const { data, error } = await supabase
     .from('players')
-    .insert(player)
+    .insert(player as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as Player;
 }
 
 export async function updatePlayer(id: string, updates: Partial<Player>): Promise<Player | null> {
@@ -81,13 +164,13 @@ export async function updatePlayer(id: string, updates: Partial<Player>): Promis
 
   const { data, error } = await supabase
     .from('players')
-    .update(updates)
+    .update(updates as any)
     .eq('id', id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as Player;
 }
 
 // ============================================
@@ -136,7 +219,7 @@ export async function createVideo(video: Omit<Video, 'id' | 'created_at' | 'upda
 
   const { data, error } = await supabase
     .from('videos')
-    .insert(video)
+    .insert(video as any)
     .select()
     .single();
 
@@ -156,7 +239,7 @@ export async function updateVideo(id: string, updates: Partial<Video>): Promise<
 
   const { data, error } = await supabase
     .from('videos')
-    .update(updates)
+    .update(updates as any)
     .eq('id', id)
     .select()
     .single();
@@ -213,7 +296,7 @@ export async function createComment(comment: Omit<Comment, 'id' | 'created_at'>)
 
   const { data, error } = await supabase
     .from('comments')
-    .insert(comment)
+    .insert(comment as any)
     .select()
     .single();
 
@@ -269,7 +352,7 @@ export async function createScreenshot(screenshot: Omit<Screenshot, 'id' | 'crea
 
   const { data, error } = await supabase
     .from('screenshots')
-    .insert(screenshot)
+    .insert(screenshot as any)
     .select()
     .single();
 
@@ -309,7 +392,7 @@ export async function createAudioComment(comment: Omit<AudioComment, 'id' | 'cre
 
   const { data, error } = await supabase
     .from('audio_comments')
-    .insert(comment)
+    .insert(comment as any)
     .select()
     .single();
 
@@ -347,7 +430,7 @@ export async function createMatch(match: Omit<Match, 'id' | 'created_at' | 'upda
 
   const { data, error } = await supabase
     .from('matches')
-    .insert(match)
+    .insert(match as any)
     .select()
     .single();
 
@@ -387,7 +470,7 @@ export async function createPlayerPhoto(photo: Omit<PlayerPhoto, 'id' | 'created
 
   const { data, error } = await supabase
     .from('player_photos')
-    .insert(photo)
+    .insert(photo as any)
     .select()
     .single();
 
@@ -443,7 +526,7 @@ export async function createPlayerClip(clip: Omit<PlayerClip, 'id' | 'created_at
 
   const { data, error } = await supabase
     .from('player_clips')
-    .insert(clip)
+    .insert(clip as any)
     .select()
     .single();
 
@@ -499,7 +582,7 @@ export async function createGoal(goal: Omit<Goal, 'id' | 'created_at'>): Promise
 
   const { data, error } = await supabase
     .from('goals')
-    .insert(goal)
+    .insert(goal as any)
     .select()
     .single();
 
