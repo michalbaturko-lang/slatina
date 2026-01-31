@@ -490,6 +490,10 @@ const ALL_EVENT_TYPES: EventType[] = [
   },
 ];
 
+// Generování mock AI events na základě délky videa
+export function generateMockAIEvents(duration: number, sport: string = 'football'): AIEvent[] {
+  const events: AIEvent[] = [];
+
   // Filtruj události podle věkové kategorie (default U9 pro SK Slatina 2017)
   const ageGroup = 'U9'; // SK Slatina ročník 2017
   const relevantEvents = ALL_EVENT_TYPES.filter(e => e.ageGroups.includes(ageGroup));
