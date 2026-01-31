@@ -53,6 +53,17 @@ export default function UploadPage() {
   // Team info
   const team = typeof window !== 'undefined' ? getTeam() : null;
 
+  // Auto-generate title from opponent and score
+  useEffect(() => {
+    if (videoType === 'match' && opponent) {
+      if (scoreHome !== '' && scoreAway !== '') {
+        setTitle(`Slatina-${opponent} ${scoreHome}:${scoreAway}`);
+      } else {
+        setTitle(`Slatina-${opponent}`);
+      }
+    }
+  }, [opponent, scoreHome, scoreAway, videoType]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -333,10 +344,14 @@ export default function UploadPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="např. Zápas vs. Sparta Praha U9"
+              placeholder="Automaticky z výsledku"
+              style={{ fontSize: 16 }}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
               disabled={status !== 'idle'}
             />
+            {videoType === 'match' && opponent && (
+              <p className="text-xs text-gray-500 mt-1">Název se generuje automaticky z výsledku</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -371,46 +386,58 @@ export default function UploadPage() {
           {videoType === 'match' && opponent && (
             <div>
               <label className="block text-sm font-medium mb-2">Výsledek zápasu</label>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2" style={{ maxWidth: 280 }}>
                 <div className="flex-1">
-                  <label className="block text-xs text-gray-400 mb-1 text-center">SK Slatina</label>
+                  <label className="block text-xs text-gray-400 mb-1 text-center">Slatina</label>
                   <input
-                    type="number"
-                    min="0"
-                    max="99"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={scoreHome}
-                    onChange={(e) => setScoreHome(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 99)) {
+                        setScoreHome(val);
+                      }
+                    }}
                     placeholder="0"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-center text-2xl font-bold focus:outline-none focus:border-blue-500 transition"
+                    style={{ fontSize: 16 }}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition"
                     disabled={status !== 'idle'}
                   />
                 </div>
-                <span className="text-2xl font-bold text-gray-500">:</span>
+                <span className="text-xl font-bold text-gray-500 pt-5">:</span>
                 <div className="flex-1">
-                  <label className="block text-xs text-gray-400 mb-1 text-center">{opponent}</label>
+                  <label className="block text-xs text-gray-400 mb-1 text-center truncate">{opponent}</label>
                   <input
-                    type="number"
-                    min="0"
-                    max="99"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={scoreAway}
-                    onChange={(e) => setScoreAway(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 99)) {
+                        setScoreAway(val);
+                      }
+                    }}
                     placeholder="0"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-center text-2xl font-bold focus:outline-none focus:border-blue-500 transition"
+                    style={{ fontSize: 16 }}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition"
                     disabled={status !== 'idle'}
                   />
                 </div>
+                {scoreHome !== '' && scoreAway !== '' && (
+                  <div className={`text-2xl pt-5 ${
+                    parseInt(scoreHome) > parseInt(scoreAway) ? 'text-green-400' :
+                    parseInt(scoreHome) < parseInt(scoreAway) ? 'text-red-400' :
+                    'text-yellow-400'
+                  }`}>
+                    {parseInt(scoreHome) > parseInt(scoreAway) ? '🏆' :
+                     parseInt(scoreHome) < parseInt(scoreAway) ? '😔' :
+                     '🤝'}
+                  </div>
+                )}
               </div>
-              {scoreHome !== '' && scoreAway !== '' && (
-                <p className={`text-center mt-2 text-sm font-medium ${
-                  parseInt(scoreHome) > parseInt(scoreAway) ? 'text-green-400' :
-                  parseInt(scoreHome) < parseInt(scoreAway) ? 'text-red-400' :
-                  'text-yellow-400'
-                }`}>
-                  {parseInt(scoreHome) > parseInt(scoreAway) ? '🏆 Výhra!' :
-                   parseInt(scoreHome) < parseInt(scoreAway) ? '😔 Prohra' :
-                   '🤝 Remíza'}
-                </p>
-              )}
             </div>
           )}
 
@@ -458,7 +485,7 @@ export default function UploadPage() {
             </label>
           </div>
 
-          <div className="flex justify-end gap-4 pt-4">
+          <div className="flex justify-end gap-4 pt-4 pb-32">
             <Link
               href="/videos"
               className="px-6 py-3 text-gray-400 hover:text-white transition"
