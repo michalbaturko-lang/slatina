@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Play,
@@ -20,7 +19,6 @@ import {
   MicOff,
   Camera,
   Download,
-  Share2,
   Brain,
   Check,
   X,
@@ -34,10 +32,7 @@ import { getVideo, getVideoBlob, updateVideo, DemoVideo, AIEvent } from '@/lib/d
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'text' | 'playerX' | 'playerO';
 
-interface Point {
-  x: number;
-  y: number;
-}
+interface Point { x: number; y: number; }
 
 interface Annotation {
   id: string;
@@ -45,7 +40,6 @@ interface Annotation {
   points: Point[];
   color: string;
   strokeWidth: number;
-  text?: string;
   startTime: number;
   endTime: number;
 }
@@ -53,19 +47,230 @@ interface Annotation {
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ffffff'];
 const STROKE_WIDTHS = [2, 4, 6, 8];
 
-export default function VideoDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
+// Inline styles for guaranteed rendering
+const styles = {
+  page: {
+    minHeight: '100vh',
+    backgroundColor: '#030712',
+    color: 'white',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  header: {
+    borderBottom: '1px solid #1f2937',
+    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+    backdropFilter: 'blur(8px)',
+    position: 'sticky' as const,
+    top: 0,
+    zIndex: 50,
+    padding: '12px 16px',
+  },
+  headerContent: {
+    maxWidth: '1800px',
+    margin: '0 auto',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: '8px',
+    borderRadius: '8px',
+    background: 'transparent',
+    border: 'none',
+    color: 'white',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    marginRight: '16px',
+  },
+  mainContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'row' as const,
+  },
+  videoSection: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  videoContainer: {
+    backgroundColor: '#000',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    flex: 1,
+  },
+  videoWrapper: {
+    position: 'relative' as const,
+    width: '100%',
+    maxWidth: '1200px',
+    aspectRatio: '16/9',
+    backgroundColor: '#1f2937',
+    borderRadius: '12px',
+    overflow: 'hidden',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain' as const,
+  },
+  canvas: {
+    position: 'absolute' as const,
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    cursor: 'crosshair',
+  },
+  toolbar: {
+    backgroundColor: '#111827',
+    borderTop: '1px solid #1f2937',
+    padding: '12px 16px',
+  },
+  toolbarContent: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    flexWrap: 'wrap' as const,
+  },
+  toolGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    backgroundColor: '#1f2937',
+    padding: '4px',
+    borderRadius: '8px',
+  },
+  toolButton: (active: boolean) => ({
+    width: '40px',
+    height: '40px',
+    borderRadius: '6px',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    backgroundColor: active ? '#2563eb' : 'transparent',
+    color: active ? 'white' : '#9ca3af',
+  }),
+  colorButton: (color: string, selected: boolean) => ({
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    border: selected ? '3px solid white' : '2px solid transparent',
+    backgroundColor: color,
+    cursor: 'pointer',
+    transform: selected ? 'scale(1.1)' : 'scale(1)',
+    transition: 'all 0.2s',
+  }),
+  controls: {
+    backgroundColor: '#111827',
+    borderTop: '1px solid #1f2937',
+    padding: '16px',
+  },
+  controlsContent: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  timeline: {
+    width: '100%',
+    height: '8px',
+    borderRadius: '4px',
+    appearance: 'none' as const,
+    backgroundColor: '#374151',
+    cursor: 'pointer',
+    marginBottom: '16px',
+  },
+  playButton: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    border: 'none',
+    backgroundColor: '#2563eb',
+    color: 'white',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlButton: {
+    padding: '8px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: 'white',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiPanel: {
+    width: '320px',
+    backgroundColor: '#111827',
+    borderLeft: '1px solid #1f2937',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflowY: 'auto' as const,
+  },
+  aiPanelHeader: {
+    padding: '16px',
+    borderBottom: '1px solid #1f2937',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aiEvent: {
+    backgroundColor: '#1f2937',
+    borderRadius: '8px',
+    padding: '12px',
+    marginBottom: '8px',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+  },
+  verifyButton: (isCorrect: boolean) => ({
+    flex: 1,
+    padding: '8px',
+    borderRadius: '6px',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
+    fontSize: '14px',
+    backgroundColor: isCorrect ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+    color: isCorrect ? '#4ade80' : '#f87171',
+  }),
+  select: {
+    backgroundColor: '#1f2937',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  volumeSlider: {
+    width: '80px',
+    height: '4px',
+    borderRadius: '2px',
+    appearance: 'none' as const,
+    backgroundColor: '#374151',
+    cursor: 'pointer',
+  },
+};
 
-  // Video data
+export default function VideoDetailPage({ params }: { params: { id: string } }) {
   const [video, setVideo] = useState<DemoVideo | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Video state
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -73,7 +278,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
 
-  // Annotation state
   const [selectedTool, setSelectedTool] = useState<ToolType>('select');
   const [selectedColor, setSelectedColor] = useState('#ef4444');
   const [strokeWidth, setStrokeWidth] = useState(4);
@@ -81,15 +285,12 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
 
-  // Voice recording
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
-  // AI events
   const [aiEvents, setAiEvents] = useState<AIEvent[]>([]);
   const [showAIPanel, setShowAIPanel] = useState(true);
 
-  // Load video data
   useEffect(() => {
     const loadVideoData = async () => {
       try {
@@ -99,42 +300,26 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           setLoading(false);
           return;
         }
-
         setVideo(videoData);
         setAiEvents(videoData.aiEvents || []);
-
-        // Load video blob
         const blob = await getVideoBlob(params.id);
         if (blob) {
-          const url = URL.createObjectURL(blob);
-          setVideoUrl(url);
+          setVideoUrl(URL.createObjectURL(blob));
         }
-
         setLoading(false);
-      } catch (err) {
+      } catch {
         setError('Chyba při načítání videa');
         setLoading(false);
       }
     };
-
     loadVideoData();
-
-    // Cleanup
-    return () => {
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-      }
-    };
+    return () => { if (videoUrl) URL.revokeObjectURL(videoUrl); };
   }, [params.id]);
 
-  // Video controls
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
+    if (isPlaying) videoRef.current.pause();
+    else videoRef.current.play();
     setIsPlaying(!isPlaying);
   }, [isPlaying]);
 
@@ -143,98 +328,53 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     videoRef.current.currentTime = Math.max(0, Math.min(time, duration));
   }, [duration]);
 
-  const skipFrames = useCallback((frames: number) => {
-    if (!videoRef.current) return;
-    const frameTime = 1 / 30; // Assuming 30fps
-    seek(currentTime + frames * frameTime);
-  }, [currentTime, seek]);
-
-  // Canvas drawing
   const getCanvasPoint = useCallback((e: React.MouseEvent): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
-
     const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height,
-    };
+    return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (selectedTool === 'select') return;
-
-    const point = getCanvasPoint(e);
     setIsDrawing(true);
-    setCurrentPoints([point]);
+    setCurrentPoints([getCanvasPoint(e)]);
   }, [selectedTool, getCanvasPoint]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isDrawing) return;
-
     const point = getCanvasPoint(e);
-
-    if (selectedTool === 'pencil') {
-      setCurrentPoints((prev) => [...prev, point]);
-    } else {
-      setCurrentPoints((prev) => [prev[0], point]);
-    }
+    if (selectedTool === 'pencil') setCurrentPoints(prev => [...prev, point]);
+    else setCurrentPoints(prev => [prev[0], point]);
   }, [isDrawing, selectedTool, getCanvasPoint]);
 
   const handleMouseUp = useCallback(() => {
     if (!isDrawing || currentPoints.length === 0) return;
-
-    const newAnnotation: Annotation = {
+    setAnnotations(prev => [...prev, {
       id: Date.now().toString(),
       type: selectedTool,
       points: currentPoints,
       color: selectedColor,
       strokeWidth,
       startTime: currentTime,
-      endTime: currentTime + 5, // Show for 5 seconds by default
-    };
-
-    setAnnotations((prev) => [...prev, newAnnotation]);
+      endTime: currentTime + 5,
+    }]);
     setIsDrawing(false);
     setCurrentPoints([]);
   }, [isDrawing, currentPoints, selectedTool, selectedColor, strokeWidth, currentTime]);
 
-  // Draw annotations on canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const visibleAnnotations = annotations.filter(
-      (a) => currentTime >= a.startTime && currentTime <= a.endTime
-    );
-
-    for (const annotation of visibleAnnotations) {
-      drawAnnotation(ctx, annotation, canvas.width, canvas.height);
-    }
-
-    // Draw current drawing
+    const visible = annotations.filter(a => currentTime >= a.startTime && currentTime <= a.endTime);
+    for (const ann of visible) drawAnnotation(ctx, ann, canvas.width, canvas.height);
     if (isDrawing && currentPoints.length > 0) {
-      drawAnnotation(
-        ctx,
-        {
-          id: 'current',
-          type: selectedTool,
-          points: currentPoints,
-          color: selectedColor,
-          strokeWidth,
-          startTime: 0,
-          endTime: 0,
-        },
-        canvas.width,
-        canvas.height
-      );
+      drawAnnotation(ctx, { id: 'current', type: selectedTool, points: currentPoints, color: selectedColor, strokeWidth, startTime: 0, endTime: 0 }, canvas.width, canvas.height);
     }
   }, [annotations, currentTime, isDrawing, currentPoints, selectedTool, selectedColor, strokeWidth]);
 
-  // Voice recording
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
       mediaRecorderRef.current?.stop();
@@ -242,18 +382,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-
-        const chunks: BlobPart[] = [];
-        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          console.log('Recording saved:', blob);
-          // TODO: Save to IndexedDB
-        };
-
-        mediaRecorder.start();
+        const recorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        recorder.start();
         setIsRecording(true);
       } catch (err) {
         console.error('Failed to start recording:', err);
@@ -261,129 +392,100 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     }
   }, [isRecording]);
 
-  // Screenshot
   const captureScreenshot = useCallback(() => {
     const videoEl = videoRef.current;
     const annotationCanvas = canvasRef.current;
     if (!videoEl || !annotationCanvas) return;
-
     const canvas = document.createElement('canvas');
     canvas.width = videoEl.videoWidth;
     canvas.height = videoEl.videoHeight;
     const ctx = canvas.getContext('2d')!;
-
-    // Draw video
     ctx.drawImage(videoEl, 0, 0);
-
-    // Draw annotations
     ctx.drawImage(annotationCanvas, 0, 0, canvas.width, canvas.height);
-
-    // Download
     const link = document.createElement('a');
     link.download = `screenshot-${Date.now()}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   }, []);
 
-  // AI event verification
   const verifyEvent = useCallback((eventId: string, isCorrect: boolean) => {
-    setAiEvents((prev) =>
-      prev.map((e) => (e.id === eventId ? { ...e, verified: isCorrect } : e))
-    );
-
-    // Save to demo store
+    setAiEvents(prev => prev.map(e => e.id === eventId ? { ...e, verified: isCorrect } : e));
     if (video) {
-      const updatedEvents = aiEvents.map((e) =>
-        e.id === eventId ? { ...e, verified: isCorrect } : e
-      );
-      updateVideo(video.id, { aiEvents: updatedEvents });
+      const updated = aiEvents.map(e => e.id === eventId ? { ...e, verified: isCorrect } : e);
+      updateVideo(video.id, { aiEvents: updated });
     }
   }, [video, aiEvents]);
 
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 style={{ width: 32, height: 32, animation: 'spin 1s linear infinite', color: '#3b82f6' }} />
       </div>
     );
   }
 
   if (error || !video) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-4">
-        <AlertCircle className="w-12 h-12 text-red-400" />
-        <p className="text-lg">{error || 'Video nebylo nalezeno'}</p>
-        <Link
-          href="/videos"
-          className="text-blue-400 hover:text-blue-300 transition"
-        >
-          Zpět na seznam videí
-        </Link>
+      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <AlertCircle style={{ width: 48, height: 48, color: '#ef4444' }} />
+        <p style={{ fontSize: 18 }}>{error || 'Video nebylo nalezeno'}</p>
+        <Link href="/videos" style={{ color: '#3b82f6' }}>Zpět na seznam videí</Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div style={styles.page}>
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-[1800px] mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/videos" className="p-2 hover:bg-gray-800 rounded-lg transition">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
+      <header style={styles.header}>
+        <div style={styles.headerContent}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Link href="/videos" style={styles.backButton}><ArrowLeft size={20} /></Link>
             <div>
-              <h1 className="font-semibold">{video.title}</h1>
-              <p className="text-sm text-gray-400">
+              <h1 style={{ fontWeight: 600, fontSize: 18 }}>{video.title}</h1>
+              <p style={{ fontSize: 14, color: '#9ca3af' }}>
                 {new Date(video.date).toLocaleDateString('cs-CZ')}
                 {video.opponent && ` • vs. ${video.opponent}`}
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={captureScreenshot}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-800 rounded-lg transition"
-            >
-              <Camera className="w-4 h-4" />
-              Screenshot
-            </button>
-            <button className="flex items-center gap-2 px-3 py-2 hover:bg-gray-800 rounded-lg transition">
-              <Download className="w-4 h-4" />
-              Export klip
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={captureScreenshot} style={styles.controlButton}>
+              <Camera size={18} /> <span style={{ marginLeft: 4 }}>Screenshot</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 flex">
-        {/* Main video area */}
-        <div className="flex-1 flex flex-col">
-          {/* Video container */}
-          <div
-            ref={containerRef}
-            className="relative flex-1 bg-black flex items-center justify-center"
-          >
-            <div className="relative w-full max-w-[1400px] aspect-video">
+      <div style={styles.mainContent}>
+        {/* Video Section */}
+        <div style={styles.videoSection}>
+          <div style={styles.videoContainer}>
+            <div style={styles.videoWrapper}>
               {videoUrl ? (
                 <video
                   ref={videoRef}
-                  className="w-full h-full"
+                  style={styles.video}
                   src={videoUrl}
-                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                  onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+                  onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
+                  onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                  <p className="text-gray-400">Video není k dispozici</p>
+                <div style={{ ...styles.video, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <p style={{ color: '#6b7280' }}>Video není k dispozici</p>
                 </div>
               )}
               <canvas
                 ref={canvasRef}
-                className="absolute inset-0 w-full h-full cursor-crosshair"
+                style={styles.canvas}
                 width={1920}
                 height={1080}
                 onMouseDown={handleMouseDown}
@@ -395,395 +497,243 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           </div>
 
           {/* Toolbar */}
-          <div className="bg-gray-900 border-t border-gray-800 p-3">
-            <div className="flex items-center justify-between max-w-[1400px] mx-auto flex-wrap gap-3">
-              {/* Drawing tools */}
-              <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
-                <ToolButton
-                  icon={<MousePointer className="w-4 h-4" />}
-                  active={selectedTool === 'select'}
-                  onClick={() => setSelectedTool('select')}
-                  tooltip="Výběr"
-                />
-                <ToolButton
-                  icon={<Pencil className="w-4 h-4" />}
-                  active={selectedTool === 'pencil'}
-                  onClick={() => setSelectedTool('pencil')}
-                  tooltip="Tužka"
-                />
-                <ToolButton
-                  icon={<ArrowRight className="w-4 h-4" />}
-                  active={selectedTool === 'arrow'}
-                  onClick={() => setSelectedTool('arrow')}
-                  tooltip="Šipka"
-                />
-                <ToolButton
-                  icon={<Circle className="w-4 h-4" />}
-                  active={selectedTool === 'circle'}
-                  onClick={() => setSelectedTool('circle')}
-                  tooltip="Kruh"
-                />
-                <ToolButton
-                  icon={<Square className="w-4 h-4" />}
-                  active={selectedTool === 'rectangle'}
-                  onClick={() => setSelectedTool('rectangle')}
-                  tooltip="Obdélník"
-                />
-                <ToolButton
-                  icon={<Type className="w-4 h-4" />}
-                  active={selectedTool === 'text'}
-                  onClick={() => setSelectedTool('text')}
-                  tooltip="Text"
-                />
-                <div className="w-px h-6 bg-gray-700 mx-1" />
-                <ToolButton
-                  icon={<span className="font-bold text-sm">X</span>}
-                  active={selectedTool === 'playerX'}
-                  onClick={() => setSelectedTool('playerX')}
-                  tooltip="Hráč X"
-                />
-                <ToolButton
-                  icon={<span className="font-bold text-sm">O</span>}
-                  active={selectedTool === 'playerO'}
-                  onClick={() => setSelectedTool('playerO')}
-                  tooltip="Hráč O"
-                />
-              </div>
-
-              {/* Colors */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
-                  {COLORS.map((color) => (
-                    <button
-                      key={color}
-                      className={`w-6 h-6 rounded-full border-2 transition ${
-                        selectedColor === color ? 'border-white scale-110' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setSelectedColor(color)}
-                    />
-                  ))}
-                </div>
-
-                {/* Stroke width */}
-                <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
-                  {STROKE_WIDTHS.map((width) => (
-                    <button
-                      key={width}
-                      className={`w-8 h-8 rounded flex items-center justify-center transition ${
-                        strokeWidth === width ? 'bg-gray-700' : 'hover:bg-gray-700'
-                      }`}
-                      onClick={() => setStrokeWidth(width)}
-                    >
-                      <div
-                        className="rounded-full bg-white"
-                        style={{ width: width * 2, height: width * 2 }}
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Voice recording */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleRecording}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-                    isRecording
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-gray-800 hover:bg-gray-700'
-                  }`}
-                >
-                  {isRecording ? (
-                    <>
-                      <MicOff className="w-4 h-4" />
-                      Zastavit nahrávání
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-4 h-4" />
-                      Nahrát komentář
-                    </>
-                  )}
-                </button>
-
-                {annotations.length > 0 && (
-                  <button
-                    onClick={() => setAnnotations([])}
-                    className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Smazat vše
+          <div style={styles.toolbar}>
+            <div style={styles.toolbarContent}>
+              <div style={styles.toolGroup}>
+                {[
+                  { tool: 'select' as ToolType, icon: <MousePointer size={18} /> },
+                  { tool: 'pencil' as ToolType, icon: <Pencil size={18} /> },
+                  { tool: 'arrow' as ToolType, icon: <ArrowRight size={18} /> },
+                  { tool: 'circle' as ToolType, icon: <Circle size={18} /> },
+                  { tool: 'rectangle' as ToolType, icon: <Square size={18} /> },
+                  { tool: 'playerX' as ToolType, icon: <span style={{ fontWeight: 'bold' }}>X</span> },
+                  { tool: 'playerO' as ToolType, icon: <span style={{ fontWeight: 'bold' }}>O</span> },
+                ].map(({ tool, icon }) => (
+                  <button key={tool} style={styles.toolButton(selectedTool === tool)} onClick={() => setSelectedTool(tool)}>
+                    {icon}
                   </button>
-                )}
+                ))}
               </div>
+
+              <div style={styles.toolGroup}>
+                {COLORS.map(color => (
+                  <button key={color} style={styles.colorButton(color, selectedColor === color)} onClick={() => setSelectedColor(color)} />
+                ))}
+              </div>
+
+              <button
+                onClick={toggleRecording}
+                style={{
+                  ...styles.controlButton,
+                  backgroundColor: isRecording ? '#dc2626' : '#1f2937',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                }}
+              >
+                {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
+                <span style={{ marginLeft: 8 }}>{isRecording ? 'Stop' : 'Nahrát komentář'}</span>
+              </button>
+
+              {annotations.length > 0 && (
+                <button onClick={() => setAnnotations([])} style={styles.controlButton}>
+                  <Trash2 size={18} /> <span style={{ marginLeft: 4 }}>Smazat vše</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Video controls */}
-          <div className="bg-gray-900 border-t border-gray-800 p-3">
-            <div className="max-w-[1400px] mx-auto">
-              {/* Timeline */}
-              <div className="mb-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={(e) => seek(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-gray-700 rounded-full appearance-none cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to right, #3b82f6 ${(currentTime / duration) * 100}%, #374151 0%)`,
-                  }}
-                />
-                {/* AI event markers */}
-                <div className="relative h-2 mt-1">
-                  {aiEvents.map((event) => (
-                    <button
-                      key={event.id}
-                      className={`absolute w-2 h-2 rounded-full transform -translate-x-1/2 hover:scale-150 transition ${
-                        event.severity === 'critical' ? 'bg-red-500' :
-                        event.severity === 'warning' ? 'bg-yellow-500' : 'bg-green-500'
-                      }`}
-                      style={{ left: `${(event.time / duration) * 100}%` }}
-                      onClick={() => seek(event.time)}
-                      title={event.labelCz || event.label}
-                    />
-                  ))}
-                </div>
+          {/* Controls */}
+          <div style={styles.controls}>
+            <div style={styles.controlsContent}>
+              <input
+                type="range"
+                min={0}
+                max={duration || 100}
+                value={currentTime}
+                onChange={e => seek(parseFloat(e.target.value))}
+                style={styles.timeline}
+              />
+
+              {/* AI Event Markers */}
+              <div style={{ position: 'relative', height: 8, marginBottom: 16 }}>
+                {aiEvents.map(event => (
+                  <button
+                    key={event.id}
+                    onClick={() => seek(event.time)}
+                    style={{
+                      position: 'absolute',
+                      left: `${(event.time / duration) * 100}%`,
+                      transform: 'translateX(-50%)',
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: event.severity === 'critical' ? '#ef4444' : event.severity === 'warning' ? '#eab308' : '#22c55e',
+                    }}
+                    title={event.labelCz}
+                  />
+                ))}
               </div>
 
-              {/* Controls */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => skipFrames(-1)}
-                    className="p-2 hover:bg-gray-800 rounded-lg transition"
-                    title="Předchozí snímek"
-                  >
-                    <SkipBack className="w-5 h-5" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button style={styles.controlButton} onClick={() => seek(currentTime - 5)}><SkipBack size={20} /></button>
+                  <button style={styles.playButton} onClick={togglePlay}>
+                    {isPlaying ? <Pause size={24} /> : <Play size={24} style={{ marginLeft: 2 }} />}
                   </button>
-                  <button
-                    onClick={togglePlay}
-                    className="p-3 bg-blue-600 hover:bg-blue-700 rounded-full transition"
-                  >
-                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                  </button>
-                  <button
-                    onClick={() => skipFrames(1)}
-                    className="p-2 hover:bg-gray-800 rounded-lg transition"
-                    title="Další snímek"
-                  >
-                    <SkipForward className="w-5 h-5" />
-                  </button>
-
-                  <span className="text-sm text-gray-400 ml-4">
+                  <button style={styles.controlButton} onClick={() => seek(currentTime + 5)}><SkipForward size={20} /></button>
+                  <span style={{ marginLeft: 16, color: '#9ca3af', fontSize: 14 }}>
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  {/* Playback speed */}
-                  <div className="relative">
-                    <select
-                      value={playbackRate}
-                      onChange={(e) => {
-                        const rate = parseFloat(e.target.value);
-                        setPlaybackRate(rate);
-                        if (videoRef.current) videoRef.current.playbackRate = rate;
-                      }}
-                      className="appearance-none bg-gray-800 px-3 py-2 pr-8 rounded-lg text-sm cursor-pointer"
-                    >
-                      <option value={0.25}>0.25x</option>
-                      <option value={0.5}>0.5x</option>
-                      <option value={1}>1x</option>
-                      <option value={1.5}>1.5x</option>
-                      <option value={2}>2x</option>
-                    </select>
-                    <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <select
+                    value={playbackRate}
+                    onChange={e => {
+                      const rate = parseFloat(e.target.value);
+                      setPlaybackRate(rate);
+                      if (videoRef.current) videoRef.current.playbackRate = rate;
+                    }}
+                    style={styles.select}
+                  >
+                    <option value={0.25}>0.25x</option>
+                    <option value={0.5}>0.5x</option>
+                    <option value={1}>1x</option>
+                    <option value={1.5}>1.5x</option>
+                    <option value={2}>2x</option>
+                  </select>
 
-                  {/* Volume */}
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="w-4 h-4 text-gray-400" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Volume2 size={18} style={{ color: '#9ca3af' }} />
                     <input
                       type="range"
                       min={0}
                       max={1}
                       step={0.1}
                       value={volume}
-                      onChange={(e) => {
+                      onChange={e => {
                         const vol = parseFloat(e.target.value);
                         setVolume(vol);
                         if (videoRef.current) videoRef.current.volume = vol;
                       }}
-                      className="w-20 h-1 bg-gray-700 rounded-full appearance-none cursor-pointer"
+                      style={styles.volumeSlider}
                     />
                   </div>
-
-                  <button className="p-2 hover:bg-gray-800 rounded-lg transition">
-                    <Maximize className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* AI Events Panel */}
+        {/* AI Panel */}
         {showAIPanel && aiEvents.length > 0 && (
-          <div className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col">
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Brain className="w-5 h-5 text-purple-400" />
+          <div style={styles.aiPanel}>
+            <div style={styles.aiPanelHeader}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                <Brain size={20} style={{ color: '#a855f7' }} />
                 AI Události ({aiEvents.length})
               </h2>
-              <button
-                onClick={() => setShowAIPanel(false)}
-                className="p-1 hover:bg-gray-800 rounded transition"
-              >
-                <X className="w-4 h-4" />
+              <button style={styles.controlButton} onClick={() => setShowAIPanel(false)}>
+                <X size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {aiEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="bg-gray-800 rounded-lg p-3 hover:bg-gray-750 transition cursor-pointer"
-                  onClick={() => seek(event.time)}
-                >
-                  <div className="flex items-start justify-between mb-2">
+            <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+              {aiEvents.map(event => (
+                <div key={event.id} style={styles.aiEvent} onClick={() => seek(event.time)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div>
-                      <div className="font-medium">{event.labelCz || event.label}</div>
-                      <div className="text-sm text-gray-400">{formatTime(event.time)}</div>
+                      <div style={{ fontWeight: 500 }}>{event.labelCz || event.label}</div>
+                      <div style={{ fontSize: 12, color: '#9ca3af' }}>{formatTime(event.time)}</div>
                     </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded ${
-                        event.severity === 'critical'
-                          ? 'bg-red-500/20 text-red-400'
-                          : event.severity === 'warning'
-                          ? 'bg-yellow-500/20 text-yellow-400'
-                          : 'bg-green-500/20 text-green-400'
-                      }`}
-                    >
+                    <span style={{
+                      fontSize: 12,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      backgroundColor: event.severity === 'critical' ? 'rgba(239,68,68,0.2)' : event.severity === 'warning' ? 'rgba(234,179,8,0.2)' : 'rgba(34,197,94,0.2)',
+                      color: event.severity === 'critical' ? '#f87171' : event.severity === 'warning' ? '#facc15' : '#4ade80',
+                    }}>
                       {Math.round(event.confidence * 100)}%
                     </span>
                   </div>
 
-                  {/* Coaching tips */}
-                  {event.coachingTips && event.coachingTips.length > 0 && (
-                    <div className="text-sm text-gray-300 mb-2 italic">
+                  {event.coachingTips?.[0] && (
+                    <p style={{ fontSize: 13, color: '#d1d5db', fontStyle: 'italic', marginBottom: 8 }}>
                       "{event.coachingTips[0]}"
-                    </div>
+                    </p>
                   )}
 
                   {event.verified === undefined ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          verifyEvent(event.id, true);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded transition"
-                      >
-                        <Check className="w-4 h-4" />
-                        Správně
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button style={styles.verifyButton(true)} onClick={e => { e.stopPropagation(); verifyEvent(event.id, true); }}>
+                        <Check size={16} /> Správně
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          verifyEvent(event.id, false);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded transition"
-                      >
-                        <X className="w-4 h-4" />
-                        Špatně
+                      <button style={styles.verifyButton(false)} onClick={e => { e.stopPropagation(); verifyEvent(event.id, false); }}>
+                        <X size={16} /> Špatně
                       </button>
                     </div>
                   ) : (
-                    <div
-                      className={`text-center py-1.5 rounded text-sm ${
-                        event.verified
-                          ? 'bg-green-600/20 text-green-400'
-                          : 'bg-red-600/20 text-red-400'
-                      }`}
-                    >
+                    <div style={{
+                      textAlign: 'center',
+                      padding: 8,
+                      borderRadius: 6,
+                      fontSize: 14,
+                      backgroundColor: event.verified ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                      color: event.verified ? '#4ade80' : '#f87171',
+                    }}>
                       {event.verified ? 'Ověřeno jako správné' : 'Označeno jako chybné'}
                     </div>
                   )}
                 </div>
               ))}
             </div>
-
-            <div className="p-4 border-t border-gray-800">
-              <div className="text-sm text-gray-400 mb-2">
-                Ověřeno: {aiEvents.filter((e) => e.verified !== undefined).length} / {aiEvents.length}
-              </div>
-              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-purple-500 transition-all"
-                  style={{
-                    width: `${(aiEvents.filter((e) => e.verified !== undefined).length / aiEvents.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Show AI panel toggle when closed */}
+        {/* AI Panel Toggle */}
         {!showAIPanel && aiEvents.length > 0 && (
           <button
             onClick={() => setShowAIPanel(true)}
-            className="fixed right-4 bottom-4 bg-purple-600 hover:bg-purple-700 p-3 rounded-full shadow-lg transition"
+            style={{
+              position: 'fixed',
+              right: 16,
+              bottom: 16,
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: '#9333ea',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            }}
           >
-            <Brain className="w-6 h-6" />
+            <Brain size={24} />
           </button>
         )}
       </div>
+
+      <style jsx global>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; cursor: pointer; }
+        input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; cursor: pointer; border: none; }
+      `}</style>
     </div>
   );
 }
 
-function ToolButton({
-  icon,
-  active,
-  onClick,
-  tooltip,
-}: {
-  icon: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-  tooltip: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-9 h-9 rounded flex items-center justify-center transition ${
-        active ? 'bg-blue-600 text-white' : 'hover:bg-gray-700 text-gray-300'
-      }`}
-      title={tooltip}
-    >
-      {icon}
-    </button>
-  );
-}
-
-function drawAnnotation(
-  ctx: CanvasRenderingContext2D,
-  annotation: Annotation,
-  width: number,
-  height: number
-) {
+function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, width: number, height: number) {
   const { type, points, color, strokeWidth } = annotation;
-
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = strokeWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-
   const toCanvas = (p: Point) => ({ x: p.x * width, y: p.y * height });
 
   switch (type) {
@@ -791,86 +741,42 @@ function drawAnnotation(
       if (points.length < 2) return;
       ctx.beginPath();
       ctx.moveTo(toCanvas(points[0]).x, toCanvas(points[0]).y);
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(toCanvas(points[i]).x, toCanvas(points[i]).y);
-      }
+      for (let i = 1; i < points.length; i++) ctx.lineTo(toCanvas(points[i]).x, toCanvas(points[i]).y);
       ctx.stroke();
       break;
-
     case 'arrow':
       if (points.length < 2) return;
-      const start = toCanvas(points[0]);
-      const end = toCanvas(points[1]);
+      const start = toCanvas(points[0]), end = toCanvas(points[1]);
       const angle = Math.atan2(end.y - start.y, end.x - start.x);
-      const headLength = 20;
-
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(end.x, end.y);
-      ctx.lineTo(
-        end.x - headLength * Math.cos(angle - Math.PI / 6),
-        end.y - headLength * Math.sin(angle - Math.PI / 6)
-      );
-      ctx.lineTo(
-        end.x - headLength * Math.cos(angle + Math.PI / 6),
-        end.y - headLength * Math.sin(angle + Math.PI / 6)
-      );
-      ctx.closePath();
-      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(end.x, end.y);
+      ctx.lineTo(end.x - 20 * Math.cos(angle - Math.PI / 6), end.y - 20 * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(end.x - 20 * Math.cos(angle + Math.PI / 6), end.y - 20 * Math.sin(angle + Math.PI / 6));
+      ctx.closePath(); ctx.fill();
       break;
-
     case 'circle':
       if (points.length < 2) return;
-      const c1 = toCanvas(points[0]);
-      const c2 = toCanvas(points[1]);
+      const c1 = toCanvas(points[0]), c2 = toCanvas(points[1]);
       const radius = Math.sqrt(Math.pow(c2.x - c1.x, 2) + Math.pow(c2.y - c1.y, 2));
-      ctx.beginPath();
-      ctx.arc(c1.x, c1.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(c1.x, c1.y, radius, 0, Math.PI * 2); ctx.stroke();
       break;
-
     case 'rectangle':
       if (points.length < 2) return;
-      const r1 = toCanvas(points[0]);
-      const r2 = toCanvas(points[1]);
+      const r1 = toCanvas(points[0]), r2 = toCanvas(points[1]);
       ctx.strokeRect(r1.x, r1.y, r2.x - r1.x, r2.y - r1.y);
       break;
-
     case 'playerX':
       if (points.length < 1) return;
       const px = toCanvas(points[0]);
-      const size = 25;
       ctx.lineWidth = strokeWidth + 2;
-      ctx.beginPath();
-      ctx.moveTo(px.x - size, px.y - size);
-      ctx.lineTo(px.x + size, px.y + size);
-      ctx.moveTo(px.x + size, px.y - size);
-      ctx.lineTo(px.x - size, px.y + size);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px.x - 25, px.y - 25); ctx.lineTo(px.x + 25, px.y + 25);
+      ctx.moveTo(px.x + 25, px.y - 25); ctx.lineTo(px.x - 25, px.y + 25); ctx.stroke();
       break;
-
     case 'playerO':
       if (points.length < 1) return;
       const po = toCanvas(points[0]);
       ctx.lineWidth = strokeWidth + 2;
-      ctx.beginPath();
-      ctx.arc(po.x, po.y, 25, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(po.x, po.y, 25, 0, Math.PI * 2); ctx.stroke();
       break;
   }
-}
-
-function formatTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
