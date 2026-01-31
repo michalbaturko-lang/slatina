@@ -26,7 +26,7 @@ import {
   Send,
   Shield,
   Users,
-  Image,
+  Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -79,6 +79,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -121,6 +122,24 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [showPanel, setShowPanel] = useState(false);
 
   const team = typeof window !== 'undefined' ? getTeam() : null;
+
+  // Determine if drawing mode is active (not select mode)
+  const isDrawingMode = selectedTool !== 'select';
+
+  // Lock/unlock body scroll when drawing mode changes
+  useEffect(() => {
+    if (isDrawingMode) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
+  }, [isDrawingMode]);
 
   useEffect(() => {
     const loadVideoData = async () => {
@@ -189,6 +208,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (selectedTool === 'select') return;
 
+    // Prevent default to stop scrolling when drawing
+    e.preventDefault();
+
     const point = getCanvasPoint(e);
 
     if (selectedTool === 'playerMarker') {
@@ -203,6 +225,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   const handlePointerMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing) return;
+    e.preventDefault();
     const point = getCanvasPoint(e);
     if (selectedTool === 'pencil') setCurrentPoints(prev => [...prev, point]);
     else setCurrentPoints(prev => [prev[0], point]);
@@ -335,6 +358,11 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
     if (newScreenshot) {
       setScreenshots(prev => [...prev, newScreenshot]);
+
+      // Set first screenshot as thumbnail
+      if (!video.thumbnail) {
+        updateVideo(video.id, { thumbnail: dataUrl });
+      }
     }
   }, [video, currentTime]);
 
@@ -401,8 +429,24 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     );
   }
 
+  const scoreDisplay = video.scoreHome !== undefined && video.scoreAway !== undefined
+    ? `${video.scoreHome}:${video.scoreAway}`
+    : null;
+
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#030712', color: 'white', display: 'flex', flexDirection: 'column' }}>
+    <div
+      ref={containerRef}
+      style={{
+        minHeight: '100vh',
+        maxHeight: '100vh',
+        backgroundColor: '#030712',
+        color: 'white',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: isDrawingMode ? 'hidden' : 'auto',
+        touchAction: isDrawingMode ? 'none' : 'auto',
+      }}
+    >
       {/* Header */}
       <header style={{
         borderBottom: '1px solid #1f2937',
@@ -411,17 +455,19 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         position: 'sticky',
         top: 0,
         zIndex: 50,
+        flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Link href="/videos" style={{ padding: 8, color: 'white' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+            <Link href="/videos" style={{ padding: 8, color: 'white', flexShrink: 0 }}>
               <ArrowLeft size={20} />
             </Link>
-            <div>
-              <h1 style={{ fontWeight: 600, fontSize: 14 }}>{video.title}</h1>
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{video.title}</h1>
               <p style={{ fontSize: 11, color: '#9ca3af' }}>
                 {new Date(video.date).toLocaleDateString('cs-CZ')}
                 {video.opponent && ` • vs. ${video.opponent}`}
+                {scoreDisplay && ` (${scoreDisplay})`}
               </p>
             </div>
           </div>
@@ -437,6 +483,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               borderRadius: 8,
               color: 'white',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             <MessageSquare size={18} />
@@ -445,9 +492,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         </div>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* Video Container */}
-        <div style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8 }}>
+        <div style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, flexShrink: 0 }}>
           <div style={{
             position: 'relative',
             width: '100%',
@@ -456,6 +503,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             backgroundColor: '#1f2937',
             borderRadius: 8,
             overflow: 'hidden',
+            touchAction: isDrawingMode ? 'none' : 'auto',
           }}>
             {videoUrl ? (
               <video
@@ -475,7 +523,14 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             )}
             <canvas
               ref={canvasRef}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: selectedTool !== 'select' ? 'crosshair' : 'default' }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                cursor: selectedTool !== 'select' ? 'crosshair' : 'default',
+                touchAction: isDrawingMode ? 'none' : 'auto',
+              }}
               width={1920}
               height={1080}
               onMouseDown={handlePointerDown}
@@ -486,28 +541,59 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               onTouchMove={handlePointerMove}
               onTouchEnd={handlePointerUp}
             />
+
+            {/* Drawing mode indicator */}
+            {isDrawingMode && (
+              <div style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                backgroundColor: 'rgba(37, 99, 235, 0.9)',
+                padding: '4px 8px',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 500,
+              }}>
+                ✏️ Kreslení aktivní
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Toolbar */}
-        <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: '8px 12px', overflowX: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 'max-content' }}>
+        {/* Toolbar - Fixed width with horizontal scroll */}
+        <div style={{
+          backgroundColor: '#111827',
+          borderTop: '1px solid #1f2937',
+          padding: '8px 0',
+          flexShrink: 0,
+          width: '100%',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '0 12px',
+            minWidth: 'max-content',
+          }}>
             {/* Tools */}
             <div style={{ display: 'flex', gap: 2, backgroundColor: '#1f2937', padding: 4, borderRadius: 8 }}>
               {[
-                { tool: 'select' as ToolType, icon: <MousePointer size={16} /> },
-                { tool: 'pencil' as ToolType, icon: <Pencil size={16} /> },
-                { tool: 'arrow' as ToolType, icon: <ArrowRight size={16} /> },
-                { tool: 'circle' as ToolType, icon: <Circle size={16} /> },
-                { tool: 'rectangle' as ToolType, icon: <Square size={16} /> },
-                { tool: 'playerMarker' as ToolType, icon: <Users size={16} /> },
-              ].map(({ tool, icon }) => (
+                { tool: 'select' as ToolType, icon: <MousePointer size={16} />, label: 'Výběr' },
+                { tool: 'pencil' as ToolType, icon: <Pencil size={16} />, label: 'Tužka' },
+                { tool: 'arrow' as ToolType, icon: <ArrowRight size={16} />, label: 'Šipka' },
+                { tool: 'circle' as ToolType, icon: <Circle size={16} />, label: 'Kruh' },
+                { tool: 'rectangle' as ToolType, icon: <Square size={16} />, label: 'Obdélník' },
+                { tool: 'playerMarker' as ToolType, icon: <Users size={16} />, label: 'Hráč' },
+              ].map(({ tool, icon, label }) => (
                 <button
                   key={tool}
                   onClick={() => setSelectedTool(tool)}
+                  title={label}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 40,
+                    height: 40,
                     borderRadius: 6,
                     border: 'none',
                     display: 'flex',
@@ -523,6 +609,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               ))}
             </div>
 
+            {/* Separator */}
+            <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />
+
             {/* Colors */}
             <div style={{ display: 'flex', gap: 4 }}>
               {COLORS.map(color => (
@@ -530,16 +619,20 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                   key={color}
                   onClick={() => setSelectedColor(color)}
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: 28,
+                    height: 28,
                     borderRadius: '50%',
-                    border: selectedColor === color ? '2px solid white' : '2px solid transparent',
+                    border: selectedColor === color ? '3px solid white' : '2px solid transparent',
                     backgroundColor: color,
                     cursor: 'pointer',
+                    boxShadow: selectedColor === color ? '0 0 0 2px #2563eb' : 'none',
                   }}
                 />
               ))}
             </div>
+
+            {/* Separator */}
+            <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />
 
             {/* Stroke Width */}
             <div style={{ display: 'flex', gap: 2, backgroundColor: '#1f2937', padding: 4, borderRadius: 8 }}>
@@ -548,8 +641,8 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                   key={width}
                   onClick={() => setStrokeWidth(width)}
                   style={{
-                    width: 32,
-                    height: 32,
+                    width: 36,
+                    height: 36,
                     borderRadius: 6,
                     border: 'none',
                     display: 'flex',
@@ -570,6 +663,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               ))}
             </div>
 
+            {/* Separator */}
+            <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />
+
             {/* Actions */}
             <button
               onClick={toggleRecording}
@@ -583,6 +679,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
+                whiteSpace: 'nowrap',
               }}
             >
               {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
@@ -604,7 +701,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               }}
             >
               <Camera size={16} />
-              <span style={{ display: 'none' }}>Screenshot</span>
             </button>
 
             {screenshots.length > 0 && (
@@ -622,7 +718,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                   gap: 6,
                 }}
               >
-                <Image size={16} />
+                <ImageIcon size={16} />
                 {screenshots.length}
               </button>
             )}
@@ -650,14 +746,14 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
         {/* Screenshots Gallery */}
         {showScreenshots && screenshots.length > 0 && (
-          <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: 12 }}>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+          <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: 12, flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               {screenshots.map(screenshot => (
                 <div key={screenshot.id} style={{ position: 'relative', flexShrink: 0 }}>
                   <img
                     src={screenshot.dataUrl}
                     alt={`Screenshot at ${formatTime(screenshot.time)}`}
-                    style={{ height: 80, borderRadius: 8 }}
+                    style={{ height: 80, borderRadius: 8, cursor: 'pointer' }}
                     onClick={() => seek(screenshot.time)}
                   />
                   <button
@@ -698,7 +794,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         )}
 
         {/* Video Controls */}
-        <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: '12px 16px' }}>
+        <div style={{ backgroundColor: '#111827', borderTop: '1px solid #1f2937', padding: '12px 16px', flexShrink: 0 }}>
           {/* Timeline */}
           <input
             type="range"
@@ -717,7 +813,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             }}
           />
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={() => seek(currentTime - 5)} style={{ padding: 8, backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
                 <SkipBack size={20} />

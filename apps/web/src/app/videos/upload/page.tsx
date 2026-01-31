@@ -44,6 +44,8 @@ export default function UploadPage() {
   // Form fields - s defaultním dnešním datem
   const [title, setTitle] = useState('');
   const [opponent, setOpponent] = useState('');
+  const [scoreHome, setScoreHome] = useState<string>('');
+  const [scoreAway, setScoreAway] = useState<string>('');
   const [matchDate, setMatchDate] = useState(getTodayDate());
   const [videoType, setVideoType] = useState<'match' | 'training'>('match');
   const [enableAI, setEnableAI] = useState(true);
@@ -139,6 +141,8 @@ export default function UploadPage() {
       const newVideo = addVideo({
         title,
         opponent: opponent || undefined,
+        scoreHome: scoreHome !== '' ? parseInt(scoreHome) : undefined,
+        scoreAway: scoreAway !== '' ? parseInt(scoreAway) : undefined,
         date: matchDate,
         duration: videoDuration,
         sport: 'football', // vždy fotbal pro SK Slatina
@@ -362,6 +366,53 @@ export default function UploadPage() {
               />
             </div>
           </div>
+
+          {/* Score section */}
+          {videoType === 'match' && opponent && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Výsledek zápasu</label>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-400 mb-1 text-center">SK Slatina</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={scoreHome}
+                    onChange={(e) => setScoreHome(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-center text-2xl font-bold focus:outline-none focus:border-blue-500 transition"
+                    disabled={status !== 'idle'}
+                  />
+                </div>
+                <span className="text-2xl font-bold text-gray-500">:</span>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-400 mb-1 text-center">{opponent}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={scoreAway}
+                    onChange={(e) => setScoreAway(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-center text-2xl font-bold focus:outline-none focus:border-blue-500 transition"
+                    disabled={status !== 'idle'}
+                  />
+                </div>
+              </div>
+              {scoreHome !== '' && scoreAway !== '' && (
+                <p className={`text-center mt-2 text-sm font-medium ${
+                  parseInt(scoreHome) > parseInt(scoreAway) ? 'text-green-400' :
+                  parseInt(scoreHome) < parseInt(scoreAway) ? 'text-red-400' :
+                  'text-yellow-400'
+                }`}>
+                  {parseInt(scoreHome) > parseInt(scoreAway) ? '🏆 Výhra!' :
+                   parseInt(scoreHome) < parseInt(scoreAway) ? '😔 Prohra' :
+                   '🤝 Remíza'}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-2">Typ záznamu</label>

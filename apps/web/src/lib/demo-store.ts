@@ -7,11 +7,14 @@ export interface DemoVideo {
   id: string;
   title: string;
   opponent?: string;
+  scoreHome?: number;
+  scoreAway?: number;
   date: string;
   duration: number;
   sport: string;
   blob?: Blob;
   url?: string;
+  thumbnail?: string;
   status: 'uploading' | 'processing' | 'ready';
   uploadProgress: number;
   aiEvents: AIEvent[];

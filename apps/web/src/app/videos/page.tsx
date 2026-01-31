@@ -19,6 +19,8 @@ import {
   Download,
   Share2,
   Loader2,
+  Users,
+  Trophy,
 } from 'lucide-react';
 import { getVideos, deleteVideo, DemoVideo, getVideoBlob } from '@/lib/demo-store';
 import { OPPONENT_TEAMS } from '@/lib/team-store';
@@ -77,18 +79,36 @@ export default function VideosPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
-              <Image src="/logo.svg" alt="SK Slatina" width={32} height={32} className="rounded" />
+              <Link href="/">
+                <Image src="/logo.svg" alt="SK Slatina" width={32} height={32} className="rounded" />
+              </Link>
               <h1 className="text-xl font-semibold">SK Slatina 2017</h1>
               <span className="text-sm text-gray-400">({videos.length} videí)</span>
             </div>
 
-            <Link
-              href="/videos/upload"
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Nahrát video</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/players"
+                className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition"
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Hráči</span>
+              </Link>
+              <Link
+                href="/matches"
+                className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition"
+              >
+                <Trophy className="w-4 h-4" />
+                <span className="hidden sm:inline">Zápasy</span>
+              </Link>
+              <Link
+                href="/videos/upload"
+                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Nahrát video</span>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
@@ -204,16 +224,51 @@ function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: strin
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const hasScore = video.scoreHome !== undefined && video.scoreAway !== undefined;
+  const isWin = hasScore && video.scoreHome! > video.scoreAway!;
+  const isLoss = hasScore && video.scoreHome! < video.scoreAway!;
+  const isDraw = hasScore && video.scoreHome === video.scoreAway;
+
+  // Get thumbnail from first screenshot or use default
+  const thumbnail = video.thumbnail || (video.screenshots && video.screenshots.length > 0 ? video.screenshots[0].dataUrl : null);
+
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-gray-600 transition group">
       {/* Thumbnail */}
       <Link href={`/videos/${video.id}`} className="block">
-        <div className="aspect-video bg-gray-700 relative">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center group-hover:bg-blue-600/80 transition">
-              <Play className="w-6 h-6 text-white ml-1" />
+        <div className="aspect-video bg-gray-700 relative overflow-hidden">
+          {/* Background thumbnail */}
+          {thumbnail ? (
+            <img
+              src={thumbnail}
+              alt={video.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : null}
+
+          {/* Score overlay */}
+          {hasScore && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className={`px-6 py-3 rounded-xl backdrop-blur-sm ${
+                isWin ? 'bg-green-600/80' :
+                isLoss ? 'bg-red-600/80' :
+                'bg-yellow-600/80'
+              }`}>
+                <span className="text-4xl font-bold text-white drop-shadow-lg">
+                  {video.scoreHome}:{video.scoreAway}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Play button (smaller when score is shown) */}
+          {!hasScore && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center group-hover:bg-blue-600/80 transition">
+                <Play className="w-6 h-6 text-white ml-1" />
+              </div>
+            </div>
+          )}
 
           {/* Duration */}
           <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded text-xs">
@@ -231,11 +286,10 @@ function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: strin
             </div>
           )}
 
-          {/* AI events */}
-          {video.aiEvents.length > 0 && (
-            <div className="absolute top-2 right-2 bg-purple-600/90 px-2 py-1 rounded text-xs flex items-center gap-1">
-              <Brain className="w-3 h-3" />
-              {video.aiEvents.length}
+          {/* Screenshot count */}
+          {video.screenshots && video.screenshots.length > 0 && (
+            <div className="absolute top-2 right-2 bg-blue-600/90 px-2 py-1 rounded text-xs flex items-center gap-1">
+              📸 {video.screenshots.length}
             </div>
           )}
         </div>
@@ -257,6 +311,15 @@ function VideoCard({ video, onDelete }: { video: DemoVideo; onDelete: (id: strin
                 <span>vs. {video.opponent}</span>
               )}
             </div>
+            {hasScore && (
+              <div className={`mt-1 text-xs font-medium ${
+                isWin ? 'text-green-400' :
+                isLoss ? 'text-red-400' :
+                'text-yellow-400'
+              }`}>
+                {isWin ? '🏆 Výhra' : isLoss ? '😔 Prohra' : '🤝 Remíza'}
+              </div>
+            )}
           </Link>
 
           {/* Menu */}
@@ -302,13 +365,31 @@ function VideoListItem({ video, onDelete }: { video: DemoVideo; onDelete: (id: s
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const hasScore = video.scoreHome !== undefined && video.scoreAway !== undefined;
+  const isWin = hasScore && video.scoreHome! > video.scoreAway!;
+  const isLoss = hasScore && video.scoreHome! < video.scoreAway!;
+  const thumbnail = video.thumbnail || (video.screenshots && video.screenshots.length > 0 ? video.screenshots[0].dataUrl : null);
+
   return (
     <div className="flex items-center gap-4 bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition">
       {/* Thumbnail */}
-      <Link href={`/videos/${video.id}`} className="w-32 h-20 bg-gray-700 rounded-lg flex-shrink-0 relative block">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Play className="w-6 h-6 text-white/50" />
-        </div>
+      <Link href={`/videos/${video.id}`} className="w-32 h-20 bg-gray-700 rounded-lg flex-shrink-0 relative block overflow-hidden">
+        {thumbnail && (
+          <img src={thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        {hasScore ? (
+          <div className={`absolute inset-0 flex items-center justify-center ${
+            isWin ? 'bg-green-600/70' :
+            isLoss ? 'bg-red-600/70' :
+            'bg-yellow-600/70'
+          }`}>
+            <span className="text-xl font-bold text-white">{video.scoreHome}:{video.scoreAway}</span>
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Play className="w-6 h-6 text-white/50" />
+          </div>
+        )}
         <div className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 rounded text-xs">
           {formatDuration(video.duration)}
         </div>
@@ -317,7 +398,7 @@ function VideoListItem({ video, onDelete }: { video: DemoVideo; onDelete: (id: s
       {/* Info */}
       <Link href={`/videos/${video.id}`} className="flex-1 min-w-0">
         <h3 className="font-medium truncate">{video.title}</h3>
-        <div className="flex items-center gap-4 mt-1 text-sm text-gray-400">
+        <div className="flex items-center gap-4 mt-1 text-sm text-gray-400 flex-wrap">
           <span className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
             {formatDate(video.date)}
@@ -329,10 +410,19 @@ function VideoListItem({ video, onDelete }: { video: DemoVideo; onDelete: (id: s
           {video.opponent && (
             <span>vs. {video.opponent}</span>
           )}
+          {hasScore && (
+            <span className={`font-medium ${
+              isWin ? 'text-green-400' :
+              isLoss ? 'text-red-400' :
+              'text-yellow-400'
+            }`}>
+              {isWin ? '🏆 Výhra' : isLoss ? '😔 Prohra' : '🤝 Remíza'}
+            </span>
+          )}
         </div>
       </Link>
 
-      {/* Status/AI */}
+      {/* Status */}
       <div className="flex items-center gap-3">
         {video.status !== 'ready' && (
           <span className={`px-2 py-1 rounded text-xs ${
@@ -343,10 +433,9 @@ function VideoListItem({ video, onDelete }: { video: DemoVideo; onDelete: (id: s
              video.status === 'uploading' ? 'Nahrává se' : 'Chyba'}
           </span>
         )}
-        {video.aiEvents.length > 0 && (
-          <span className="flex items-center gap-1 text-purple-400">
-            <Brain className="w-4 h-4" />
-            {video.aiEvents.length}
+        {video.screenshots && video.screenshots.length > 0 && (
+          <span className="flex items-center gap-1 text-blue-400 text-sm">
+            📸 {video.screenshots.length}
           </span>
         )}
         <button
