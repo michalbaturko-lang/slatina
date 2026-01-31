@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  avatarUrl    String?  @map("avatar_url")
+  role         UserRole @default(PLAYER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teamMemberships TeamMember[]
+  uploadedVideos  Video[]
+  annotations     Annotation[]
+  verifiedEvents  AIEvent[]     @relation("VerifiedBy")
+  createdClips    Clip[]
+  comments        Comment[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  COACH
+  PLAYER
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String
+  sport     String
+  logoUrl   String?  @map("logo_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  members TeamMember[]
+  videos  Video[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  teamId    String         @map("team_id")
+  userId    String         @map("user_id")
+  role      TeamMemberRole @default(PLAYER)
+  joinedAt  DateTime       @default(now()) @map("joined_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@map("team_members")
+}
+
+enum TeamMemberRole {
+  ADMIN
+  COACH
+  ASSISTANT
+  PLAYER
+}
+
+model Video {
+  id              String      @id @default(uuid())
+  teamId          String      @map("team_id")
+  title           String
+  description     String?
+  s3Key           String      @map("s3_key")
+  s3KeyProcessed  String?     @map("s3_key_processed")
+  thumbnailUrl    String?     @map("thumbnail_url")
+  durationSeconds Int?        @map("duration_seconds")
+  resolution      String?
+  fileSize        BigInt?     @map("file_size")
+  status          VideoStatus @default(UPLOADING)
+  uploadedById    String      @map("uploaded_by_id")
+  matchDate       DateTime?   @map("match_date")
+  opponent        String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  uploadedBy  User         @relation(fields: [uploadedById], references: [id])
+  annotations Annotation[]
+  aiEvents    AIEvent[]
+  clips       Clip[]
+  comments    Comment[]
+
+  @@index([teamId])
+  @@index([status])
+  @@map("videos")
+}
+
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  ANALYZING
+}
+
+model Annotation {
+  id         String         @id @default(uuid())
+  videoId    String         @map("video_id")
+  userId     String         @map("user_id")
+  type       AnnotationType
+  startTime  Decimal        @map("start_time") @db.Decimal(10, 3)
+  endTime    Decimal?       @map("end_time") @db.Decimal(10, 3)
+  data       Json
+  audioS3Key String?        @map("audio_s3_key")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([videoId])
+  @@index([startTime])
+  @@map("annotations")
+}
+
+enum AnnotationType {
+  PENCIL
+  ARROW
+  CIRCLE
+  RECTANGLE
+  PLAYER_X
+  PLAYER_O
+  TEXT
+  SPOTLIGHT
+  MEASUREMENT
+}
+
+model AIEvent {
+  id           String    @id @default(uuid())
+  videoId      String    @map("video_id")
+  eventType    String    @map("event_type")
+  startTime    Decimal   @map("start_time") @db.Decimal(10, 3)
+  endTime      Decimal?  @map("end_time") @db.Decimal(10, 3)
+  confidence   Decimal   @db.Decimal(5, 4)
+  metadata     Json?
+  verifiedById String?   @map("verified_by_id")
+  isCorrect    Boolean?  @map("is_correct")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  video      Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  verifiedBy User? @relation("VerifiedBy", fields: [verifiedById], references: [id])
+
+  @@index([videoId])
+  @@index([eventType])
+  @@map("ai_events")
+}
+
+model Clip {
+  id          String   @id @default(uuid())
+  videoId     String   @map("video_id")
+  title       String?
+  description String?
+  startTime   Decimal  @map("start_time") @db.Decimal(10, 3)
+  endTime     Decimal  @map("end_time") @db.Decimal(10, 3)
+  s3Key       String?  @map("s3_key")
+  status      String   @default("pending")
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  video     Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id])
+  shares    ClipShare[]
+
+  @@index([videoId])
+  @@map("clips")
+}
+
+model ClipShare {
+  id        String   @id @default(uuid())
+  clipId    String   @map("clip_id")
+  shareType String   @map("share_type")
+  shareUrl  String   @map("share_url")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clip Clip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  @@map("clip_shares")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  videoId   String   @map("video_id")
+  userId    String   @map("user_id")
+  parentId  String?  @map("parent_id")
+  content   String
+  timestamp Decimal? @db.Decimal(10, 3)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  video    Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id])
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([videoId])
+  @@map("comments")
+}
+
+model StrategyPattern {
+  id          String   @id @default(uuid())
+  teamId      String?  @map("team_id")
+  sport       String
+  name        String
+  description String?
+  pattern     Json
+  isGlobal    Boolean  @default(false) @map("is_global")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("strategy_patterns")
+}
