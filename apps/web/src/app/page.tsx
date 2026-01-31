@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Video, Brain, Pencil, Upload, Users, ChevronRight } from 'lucide-react';
 
 export default function Home() {
@@ -9,10 +10,16 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative py-20 px-4">
         <div className="max-w-6xl mx-auto text-center">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <Video className="w-12 h-12 text-blue-500" />
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <Image
+              src="/logo.svg"
+              alt="SK Slatina"
+              width={80}
+              height={80}
+              className="rounded-xl"
+            />
             <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              Slatina
+              SK Slatina 2017
             </h1>
           </div>
           <p className="text-2xl text-gray-300 mb-4">
@@ -124,8 +131,11 @@ export default function Home() {
       {/* Footer */}
       <footer className="py-8 px-4 border-t border-gray-800">
         <div className="max-w-6xl mx-auto text-center text-gray-500 text-sm">
-          <p>Slatina - Platforma pro analýzu sportovních videí</p>
-          <p className="mt-2">Demo verze pro testování</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Image src="/logo.svg" alt="SK Slatina" width={24} height={24} className="rounded" />
+            <p>SK Slatina 2017 - Platforma pro analýzu videí</p>
+          </div>
+          <p>Demo verze pro testování</p>
         </div>
       </footer>
     </div>

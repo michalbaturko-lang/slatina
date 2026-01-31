@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   ArrowLeft,
   Users,
@@ -11,7 +12,6 @@ import {
   ChevronRight,
   Plus,
   Edit2,
-  Shield,
 } from 'lucide-react';
 import {
   getPlayers,
@@ -57,18 +57,13 @@ export default function PlayersPage() {
               <ArrowLeft size={20} />
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                backgroundColor: team?.jerseyColor || '#ffffff',
-                border: '2px solid #22c55e',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <Shield size={20} color="#22c55e" />
-              </div>
+              <Image
+                src="/logo.svg"
+                alt="SK Slatina"
+                width={40}
+                height={40}
+                style={{ borderRadius: 8 }}
+              />
               <div>
                 <h1 style={{ fontWeight: 600, fontSize: 18 }}>Hráči</h1>
                 <p style={{ fontSize: 12, color: '#9ca3af' }}>{team?.name || 'SK Slatina 2017'}</p>

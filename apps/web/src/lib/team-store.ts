@@ -107,18 +107,25 @@ export const COACHES = [
   { id: 'david', name: 'David', role: 'Asistent' },
 ];
 
-// Vzorový seznam hráčů (uživatel si může upravit)
+// Soupeři - týmy proti kterým hrajeme
+export const OPPONENT_TEAMS = [
+  { id: 'prace', name: 'Prace' },
+  { id: 'ratiskovice', name: 'Ratíškovice' },
+  { id: 'slovan', name: 'Slovan' },
+  { id: 'rafk', name: 'RAFK' },
+  { id: 'vyskov', name: 'Vyškov' },
+  { id: 'chrlice', name: 'Chrlice' },
+];
+
+// Seznam hráčů SK Slatina 2017
 const DEFAULT_PLAYERS: Player[] = [
-  { id: 'p1', name: 'Adam', number: 1, position: 'Brankář', active: true },
-  { id: 'p2', name: 'Bára', number: 2, position: 'Obránce', active: true },
-  { id: 'p3', name: 'Cyril', number: 3, position: 'Obránce', active: true },
-  { id: 'p4', name: 'David', number: 4, position: 'Záložník', active: true },
-  { id: 'p5', name: 'Ema', number: 5, position: 'Záložník', active: true },
-  { id: 'p6', name: 'Filip', number: 6, position: 'Útočník', active: true },
-  { id: 'p7', name: 'Gábina', number: 7, position: 'Útočník', active: true },
-  { id: 'p8', name: 'Honza', number: 8, position: 'Záložník', active: true },
-  { id: 'p9', name: 'Iveta', number: 9, position: 'Útočník', active: true },
-  { id: 'p10', name: 'Jakub', number: 10, position: 'Záložník', active: true },
+  { id: 'p1', name: 'Batu', number: 1, active: true },
+  { id: 'p2', name: 'Míša', number: 2, active: true },
+  { id: 'p3', name: 'Filip', number: 3, active: true },
+  { id: 'p4', name: 'Hugo', number: 4, active: true },
+  { id: 'p5', name: 'Tomáš', number: 5, active: true },
+  { id: 'p6', name: 'Honza', number: 6, active: true },
+  { id: 'p7', name: 'Andri', number: 7, active: true },
 ];
 
 // Team configuration

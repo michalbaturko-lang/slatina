@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Video,
   Upload,
@@ -20,6 +21,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { getVideos, deleteVideo, DemoVideo, getVideoBlob } from '@/lib/demo-store';
+import { OPPONENT_TEAMS } from '@/lib/team-store';
 
 export default function VideosPage() {
   const [videos, setVideos] = useState<DemoVideo[]>([]);
@@ -27,6 +29,7 @@ export default function VideosPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterOpponent, setFilterOpponent] = useState<string>('all');
 
   useEffect(() => {
     loadVideos();
@@ -49,7 +52,8 @@ export default function VideosPage() {
     const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          video.opponent?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || video.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    const matchesOpponent = filterOpponent === 'all' || video.opponent === filterOpponent;
+    return matchesSearch && matchesStatus && matchesOpponent;
   });
 
   const formatDuration = (seconds: number): string => {
@@ -73,9 +77,9 @@ export default function VideosPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
-              <Video className="w-6 h-6 text-blue-400" />
-              <h1 className="text-xl font-semibold">Videa</h1>
-              <span className="text-sm text-gray-400">({videos.length})</span>
+              <Image src="/logo.svg" alt="SK Slatina" width={32} height={32} className="rounded" />
+              <h1 className="text-xl font-semibold">SK Slatina 2017</h1>
+              <span className="text-sm text-gray-400">({videos.length} videí)</span>
             </div>
 
             <Link
@@ -112,15 +116,29 @@ export default function VideosPage() {
             />
           </div>
 
-          {/* Status filter */}
+          {/* Opponent filter */}
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-400" />
+            <select
+              value={filterOpponent}
+              onChange={(e) => setFilterOpponent(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+            >
+              <option value="all">Všichni soupeři</option>
+              {OPPONENT_TEAMS.map(team => (
+                <option key={team.id} value={team.name}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status filter */}
+          <div className="flex items-center gap-2">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
             >
-              <option value="all">Všechny</option>
+              <option value="all">Všechny stavy</option>
               <option value="ready">Připravené</option>
               <option value="processing">Zpracovávají se</option>
               <option value="uploading">Nahrávají se</option>

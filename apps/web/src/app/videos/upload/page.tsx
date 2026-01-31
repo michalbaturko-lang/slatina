@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   ArrowLeft,
   Upload,
@@ -11,14 +12,13 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  Shield,
 } from 'lucide-react';
 import {
   addVideo,
   saveVideoBlob,
   simulateAIAnalysis,
 } from '@/lib/demo-store';
-import { getTeam, COACHES } from '@/lib/team-store';
+import { getTeam, COACHES, OPPONENT_TEAMS } from '@/lib/team-store';
 
 interface UploadProgress {
   loaded: number;
@@ -189,16 +189,17 @@ export default function UploadPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         {/* Team info */}
-        <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6 flex items-center gap-4">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: team?.jerseyColor || '#22c55e' }}
-          >
-            <Shield className="w-6 h-6 text-white" />
-          </div>
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6 flex items-center gap-4">
+          <Image
+            src="/logo.svg"
+            alt="SK Slatina"
+            width={48}
+            height={48}
+            className="rounded-lg"
+          />
           <div>
-            <p className="font-semibold text-green-300">{team?.name || 'SK Slatina 2007'}</p>
-            <p className="text-sm text-green-400/70">
+            <p className="font-semibold text-blue-300">{team?.name || 'SK Slatina 2017'}</p>
+            <p className="text-sm text-blue-400/70">
               Trenéři: {COACHES.map(c => c.name).join(', ')}
             </p>
           </div>
@@ -337,14 +338,17 @@ export default function UploadPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Soupeř</label>
-              <input
-                type="text"
+              <select
                 value={opponent}
                 onChange={(e) => setOpponent(e.target.value)}
-                placeholder="např. Sparta Praha"
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
                 disabled={status !== 'idle'}
-              />
+              >
+                <option value="">-- Vyberte soupeře --</option>
+                {OPPONENT_TEAMS.map(team => (
+                  <option key={team.id} value={team.name}>{team.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
