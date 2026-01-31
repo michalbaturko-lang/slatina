@@ -11,13 +11,14 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Shield,
 } from 'lucide-react';
 import {
   addVideo,
   saveVideoBlob,
   simulateAIAnalysis,
-  DemoVideo,
 } from '@/lib/demo-store';
+import { getTeam, COACHES } from '@/lib/team-store';
 
 interface UploadProgress {
   loaded: number;
@@ -26,6 +27,9 @@ interface UploadProgress {
 }
 
 type UploadStatus = 'idle' | 'uploading' | 'processing' | 'analyzing' | 'complete' | 'error';
+
+// Dnešní datum ve formátu YYYY-MM-DD
+const getTodayDate = () => new Date().toISOString().split('T')[0];
 
 export default function UploadPage() {
   const router = useRouter();
@@ -37,13 +41,15 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(0);
 
-  // Form fields
+  // Form fields - s defaultním dnešním datem
   const [title, setTitle] = useState('');
   const [opponent, setOpponent] = useState('');
-  const [matchDate, setMatchDate] = useState('');
-  const [description, setDescription] = useState('');
-  const [sport, setSport] = useState('football');
+  const [matchDate, setMatchDate] = useState(getTodayDate());
+  const [videoType, setVideoType] = useState<'match' | 'training'>('match');
   const [enableAI, setEnableAI] = useState(true);
+
+  // Team info
+  const team = typeof window !== 'undefined' ? getTeam() : null;
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -133,9 +139,9 @@ export default function UploadPage() {
       const newVideo = addVideo({
         title,
         opponent: opponent || undefined,
-        date: matchDate || new Date().toISOString().split('T')[0],
+        date: matchDate,
         duration: videoDuration,
-        sport,
+        sport: 'football', // vždy fotbal pro SK Slatina
         status: 'processing',
         uploadProgress: 100,
       });
@@ -182,11 +188,27 @@ export default function UploadPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Team info */}
+        <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6 flex items-center gap-4">
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: team?.jerseyColor || '#22c55e' }}
+          >
+            <Shield className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <p className="font-semibold text-green-300">{team?.name || 'SK Slatina 2007'}</p>
+            <p className="text-sm text-green-400/70">
+              Trenéři: {COACHES.map(c => c.name).join(', ')}
+            </p>
+          </div>
+        </div>
+
         {/* Demo notice */}
-        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
-          <p className="text-sm text-blue-300">
-            <strong>Demo verze:</strong> Video se ukládá lokálně ve vašem prohlížeči (IndexedDB).
-            Data zůstanou zachována i po zavření prohlížeče.
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 mb-6">
+          <p className="text-xs text-gray-400">
+            Video se ukládá lokálně ve vašem prohlížeči. AI analýza detekuje situace jako
+            chumel hráčů, chybějící nabídky, ztráta soupeře a další.
           </p>
         </div>
 
@@ -338,32 +360,33 @@ export default function UploadPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Sport</label>
-            <select
-              value={sport}
-              onChange={(e) => setSport(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
-              disabled={status !== 'idle'}
-            >
-              <option value="football">Fotbal</option>
-              <option value="hockey">Hokej</option>
-              <option value="basketball">Basketbal</option>
-              <option value="handball">Házená</option>
-              <option value="floorball">Florbal</option>
-              <option value="other">Jiný</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Popis</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Volitelný popis videa..."
-              rows={3}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition resize-none"
-              disabled={status !== 'idle'}
-            />
+            <label className="block text-sm font-medium mb-2">Typ záznamu</label>
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setVideoType('match')}
+                className={`flex-1 py-3 rounded-lg border transition ${
+                  videoType === 'match'
+                    ? 'border-green-500 bg-green-500/20 text-green-400'
+                    : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
+                }`}
+                disabled={status !== 'idle'}
+              >
+                Zápas
+              </button>
+              <button
+                type="button"
+                onClick={() => setVideoType('training')}
+                className={`flex-1 py-3 rounded-lg border transition ${
+                  videoType === 'training'
+                    ? 'border-green-500 bg-green-500/20 text-green-400'
+                    : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
+                }`}
+                disabled={status !== 'idle'}
+              >
+                Trénink
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

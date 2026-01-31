@@ -9,26 +9,35 @@ import {
   SkipBack,
   SkipForward,
   Volume2,
-  Maximize,
   Pencil,
   Circle,
   Square,
   ArrowRight,
-  Type,
   Mic,
   MicOff,
   Camera,
-  Download,
   Brain,
   Check,
   X,
-  ChevronDown,
   Trash2,
   MousePointer,
   Loader2,
   AlertCircle,
+  MessageSquare,
+  Send,
+  ThumbsUp,
+  ThumbsDown,
+  Shield,
 } from 'lucide-react';
 import { getVideo, getVideoBlob, updateVideo, DemoVideo, AIEvent } from '@/lib/demo-store';
+import {
+  getTeam,
+  getComments,
+  addComment,
+  deleteComment,
+  addFeedback,
+  CoachComment,
+} from '@/lib/team-store';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'text' | 'playerX' | 'playerO';
 
@@ -291,6 +300,18 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [aiEvents, setAiEvents] = useState<AIEvent[]>([]);
   const [showAIPanel, setShowAIPanel] = useState(true);
 
+  // Coach comments
+  const [comments, setComments] = useState<CoachComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [showComments, setShowComments] = useState(false);
+
+  // Feedback for wrong AI detections
+  const [feedbackEventId, setFeedbackEventId] = useState<string | null>(null);
+  const [feedbackComment, setFeedbackComment] = useState('');
+
+  // Team info
+  const team = typeof window !== 'undefined' ? getTeam() : null;
+
   useEffect(() => {
     const loadVideoData = async () => {
       try {
@@ -302,6 +323,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         }
         setVideo(videoData);
         setAiEvents(videoData.aiEvents || []);
+        setComments(getComments(params.id));
         const blob = await getVideoBlob(params.id);
         if (blob) {
           setVideoUrl(URL.createObjectURL(blob));
@@ -409,12 +431,65 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   }, []);
 
   const verifyEvent = useCallback((eventId: string, isCorrect: boolean) => {
-    setAiEvents(prev => prev.map(e => e.id === eventId ? { ...e, verified: isCorrect } : e));
-    if (video) {
-      const updated = aiEvents.map(e => e.id === eventId ? { ...e, verified: isCorrect } : e);
-      updateVideo(video.id, { aiEvents: updated });
+    if (isCorrect) {
+      // Označeno jako správné - rovnou uložit
+      setAiEvents(prev => prev.map(e => e.id === eventId ? { ...e, verified: true } : e));
+      if (video) {
+        const updated = aiEvents.map(e => e.id === eventId ? { ...e, verified: true } : e);
+        updateVideo(video.id, { aiEvents: updated });
+        addFeedback({
+          eventId,
+          videoId: video.id,
+          isCorrect: true,
+          comment: '',
+        });
+      }
+    } else {
+      // Označeno jako špatné - otevřít dialog pro komentář
+      setFeedbackEventId(eventId);
+      setFeedbackComment('');
     }
   }, [video, aiEvents]);
+
+  const submitFeedback = useCallback(() => {
+    if (!feedbackEventId || !video) return;
+
+    // Uložit feedback s komentářem
+    addFeedback({
+      eventId: feedbackEventId,
+      videoId: video.id,
+      isCorrect: false,
+      comment: feedbackComment,
+    });
+
+    // Označit jako verified=false
+    setAiEvents(prev => prev.map(e => e.id === feedbackEventId ? { ...e, verified: false } : e));
+    const updated = aiEvents.map(e => e.id === feedbackEventId ? { ...e, verified: false } : e);
+    updateVideo(video.id, { aiEvents: updated });
+
+    // Zavřít dialog
+    setFeedbackEventId(null);
+    setFeedbackComment('');
+  }, [feedbackEventId, feedbackComment, video, aiEvents]);
+
+  const handleAddComment = useCallback(() => {
+    if (!newComment.trim() || !video) return;
+
+    const comment = addComment({
+      videoId: video.id,
+      time: currentTime,
+      text: newComment.trim(),
+      category: 'note',
+    });
+
+    setComments(prev => [...prev, comment]);
+    setNewComment('');
+  }, [newComment, video, currentTime]);
+
+  const handleDeleteComment = useCallback((id: string) => {
+    deleteComment(id);
+    setComments(prev => prev.filter(c => c.id !== id));
+  }, []);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -627,73 +702,205 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           </div>
         </div>
 
-        {/* AI Panel */}
-        {showAIPanel && aiEvents.length > 0 && (
+        {/* Right Panel - AI Events & Comments */}
+        {showAIPanel && (
           <div style={styles.aiPanel}>
-            <div style={styles.aiPanelHeader}>
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-                <Brain size={20} style={{ color: '#a855f7' }} />
-                AI Události ({aiEvents.length})
-              </h2>
-              <button style={styles.controlButton} onClick={() => setShowAIPanel(false)}>
-                <X size={18} />
+            {/* Team Header */}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: team?.jerseyColor || '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Shield size={16} color="white" />
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 500 }}>{team?.name || 'SK Slatina 2007'}</span>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #1f2937' }}>
+              <button
+                onClick={() => setShowComments(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  border: 'none',
+                  backgroundColor: !showComments ? '#1f2937' : 'transparent',
+                  color: !showComments ? '#a855f7' : '#9ca3af',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <Brain size={16} />
+                AI ({aiEvents.length})
+              </button>
+              <button
+                onClick={() => setShowComments(true)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  border: 'none',
+                  backgroundColor: showComments ? '#1f2937' : 'transparent',
+                  color: showComments ? '#22c55e' : '#9ca3af',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <MessageSquare size={16} />
+                Komentáře ({comments.length})
               </button>
             </div>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-              {aiEvents.map(event => (
-                <div key={event.id} style={styles.aiEvent} onClick={() => seek(event.time)}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 500 }}>{event.labelCz || event.label}</div>
-                      <div style={{ fontSize: 12, color: '#9ca3af' }}>{formatTime(event.time)}</div>
-                    </div>
-                    <span style={{
-                      fontSize: 12,
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      backgroundColor: event.severity === 'critical' ? 'rgba(239,68,68,0.2)' : event.severity === 'warning' ? 'rgba(234,179,8,0.2)' : 'rgba(34,197,94,0.2)',
-                      color: event.severity === 'critical' ? '#f87171' : event.severity === 'warning' ? '#facc15' : '#4ade80',
-                    }}>
-                      {Math.round(event.confidence * 100)}%
-                    </span>
-                  </div>
+            {/* AI Events Tab */}
+            {!showComments && (
+              <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+                {aiEvents.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#6b7280', padding: 24 }}>Žádné AI události</p>
+                ) : (
+                  aiEvents.map(event => (
+                    <div key={event.id} style={styles.aiEvent} onClick={() => seek(event.time)}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontWeight: 500, fontSize: 14 }}>{event.labelCz || event.label}</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(event.time)}</div>
+                        </div>
+                        <span style={{
+                          fontSize: 11,
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          backgroundColor: event.severity === 'critical' ? 'rgba(239,68,68,0.2)' : event.severity === 'warning' ? 'rgba(234,179,8,0.2)' : 'rgba(34,197,94,0.2)',
+                          color: event.severity === 'critical' ? '#f87171' : event.severity === 'warning' ? '#facc15' : '#4ade80',
+                        }}>
+                          {Math.round(event.confidence * 100)}%
+                        </span>
+                      </div>
 
-                  {event.coachingTips?.[0] && (
-                    <p style={{ fontSize: 13, color: '#d1d5db', fontStyle: 'italic', marginBottom: 8 }}>
-                      "{event.coachingTips[0]}"
+                      {event.coachingTips?.[0] && (
+                        <p style={{ fontSize: 12, color: '#d1d5db', fontStyle: 'italic', marginBottom: 8 }}>
+                          "{event.coachingTips[0]}"
+                        </p>
+                      )}
+
+                      {event.verified === undefined ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            style={{ ...styles.verifyButton(true), fontSize: 12, padding: 6 }}
+                            onClick={e => { e.stopPropagation(); verifyEvent(event.id, true); }}
+                          >
+                            <ThumbsUp size={14} />
+                          </button>
+                          <button
+                            style={{ ...styles.verifyButton(false), fontSize: 12, padding: 6 }}
+                            onClick={e => { e.stopPropagation(); verifyEvent(event.id, false); }}
+                          >
+                            <ThumbsDown size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: 6,
+                          borderRadius: 4,
+                          fontSize: 12,
+                          backgroundColor: event.verified ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                          color: event.verified ? '#4ade80' : '#f87171',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}>
+                          {event.verified ? <ThumbsUp size={12} /> : <ThumbsDown size={12} />}
+                          {event.verified ? 'Správně' : 'Chybné - AI se učí'}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Comments Tab */}
+            {showComments && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+                  {comments.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#6b7280', padding: 24 }}>
+                      Zatím žádné komentáře.<br />
+                      <span style={{ fontSize: 12 }}>Přidejte komentář k aktuálnímu času videa.</span>
                     </p>
-                  )}
-
-                  {event.verified === undefined ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={styles.verifyButton(true)} onClick={e => { e.stopPropagation(); verifyEvent(event.id, true); }}>
-                        <Check size={16} /> Správně
-                      </button>
-                      <button style={styles.verifyButton(false)} onClick={e => { e.stopPropagation(); verifyEvent(event.id, false); }}>
-                        <X size={16} /> Špatně
-                      </button>
-                    </div>
                   ) : (
-                    <div style={{
-                      textAlign: 'center',
-                      padding: 8,
-                      borderRadius: 6,
-                      fontSize: 14,
-                      backgroundColor: event.verified ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
-                      color: event.verified ? '#4ade80' : '#f87171',
-                    }}>
-                      {event.verified ? 'Ověřeno jako správné' : 'Označeno jako chybné'}
-                    </div>
+                    comments.sort((a, b) => a.time - b.time).map(comment => (
+                      <div
+                        key={comment.id}
+                        style={{ ...styles.aiEvent, position: 'relative' }}
+                        onClick={() => seek(comment.time)}
+                      >
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                          {formatTime(comment.time)}
+                        </div>
+                        <p style={{ fontSize: 13 }}>{comment.text}</p>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                          style={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#6b7280',
+                            cursor: 'pointer',
+                            padding: 4,
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))
                   )}
                 </div>
-              ))}
-            </div>
+
+                {/* Add comment */}
+                <div style={{ padding: 12, borderTop: '1px solid #1f2937' }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      value={newComment}
+                      onChange={e => setNewComment(e.target.value)}
+                      placeholder={`Komentář v ${formatTime(currentTime)}...`}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#1f2937',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '8px 12px',
+                        color: 'white',
+                        fontSize: 13,
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && handleAddComment()}
+                    />
+                    <button
+                      onClick={handleAddComment}
+                      disabled={!newComment.trim()}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: newComment.trim() ? '#22c55e' : '#374151',
+                        border: 'none',
+                        borderRadius: 6,
+                        color: 'white',
+                        cursor: newComment.trim() ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* AI Panel Toggle */}
-        {!showAIPanel && aiEvents.length > 0 && (
+        {/* Panel Toggle */}
+        {!showAIPanel && (
           <button
             onClick={() => setShowAIPanel(true)}
             style={{
@@ -717,6 +924,80 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           </button>
         )}
       </div>
+
+      {/* Feedback Dialog */}
+      {feedbackEventId && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.75)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100,
+        }}>
+          <div style={{
+            backgroundColor: '#1f2937',
+            borderRadius: 12,
+            padding: 24,
+            width: '90%',
+            maxWidth: 400,
+          }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>
+              Co bylo špatně?
+            </h3>
+            <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 16 }}>
+              Popište, proč byla AI detekce chybná. Tato zpětná vazba pomůže AI se zlepšit.
+            </p>
+            <textarea
+              value={feedbackComment}
+              onChange={e => setFeedbackComment(e.target.value)}
+              placeholder="např. 'Hráči nebyli moc blízko, měli správné rozestupy'"
+              style={{
+                width: '100%',
+                backgroundColor: '#374151',
+                border: '1px solid #4b5563',
+                borderRadius: 8,
+                padding: 12,
+                color: 'white',
+                fontSize: 14,
+                minHeight: 100,
+                resize: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+              <button
+                onClick={() => setFeedbackEventId(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#374151',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                Zrušit
+              </button>
+              <button
+                onClick={submitFeedback}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#ef4444',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                Odeslat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
