@@ -100,3 +100,254 @@ body {
   background: rgb(14, 165, 233);
   color: white;
 }
+
+/* ============================================
+   MOBILE RESPONSIVE STYLES
+   ============================================ */
+
+/* Safe area for mobile devices (notch, home indicator) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Touch-friendly button sizes */
+@media (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Larger tap targets for mobile */
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent zoom on input focus */
+  input, select, textarea {
+    font-size: 16px;
+  }
+
+  /* Mobile video player adjustments */
+  .video-container {
+    border-radius: 0;
+  }
+
+  /* Full-width cards on mobile */
+  .card-mobile-full {
+    margin-left: -1rem;
+    margin-right: -1rem;
+    border-radius: 0;
+  }
+}
+
+/* Swipe gestures hint */
+.swipe-hint {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.swipe-hint::-webkit-scrollbar {
+  display: none;
+}
+
+.swipe-item {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+/* Mobile modal/drawer styles */
+.mobile-drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 90vh;
+  border-top-left-radius: 1rem;
+  border-top-right-radius: 1rem;
+  transform: translateY(100%);
+  transition: transform 0.3s ease-out;
+}
+
+.mobile-drawer.open {
+  transform: translateY(0);
+}
+
+.mobile-drawer-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  margin: 0.75rem auto;
+}
+
+/* Floating Action Button */
+.fab {
+  position: fixed;
+  bottom: 5rem;
+  right: 1rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.fab:active {
+  transform: scale(0.95);
+}
+
+/* Mobile navigation bar */
+.mobile-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 50;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Pull to refresh indicator */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100%);
+  transition: transform 0.2s;
+  z-index: 100;
+}
+
+.pull-indicator.visible {
+  transform: translateX(-50%) translateY(1rem);
+}
+
+/* ============================================
+   DARK MODE OPTIMIZATIONS
+   ============================================ */
+
+/* Better contrast for dark mode */
+@media (prefers-color-scheme: dark) {
+  ::selection {
+    background: rgba(59, 130, 246, 0.5);
+    color: white;
+  }
+}
+
+/* Smooth transitions */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus states for accessibility */
+:focus-visible {
+  outline: 2px solid rgb(59, 130, 246);
+  outline-offset: 2px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   CUSTOM RANGE SLIDER (Video timeline)
+   ============================================ */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #3b82f6;
+  margin-top: -6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Pulse animation for recording */
+.recording-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
