@@ -1,4 +1,4 @@
-// Upload helper for R2 storage
+// Upload helper for R2 storage - server-side upload to bypass CORS
 
 type UploadFolder = 'videos' | 'photos' | 'audio' | 'screenshots';
 
@@ -12,19 +12,22 @@ export async function uploadFile(
   folder: UploadFolder,
   filename?: string
 ): Promise<UploadResult> {
-  const name = filename || (file instanceof File ? file.name : `file-${Date.now()}`);
+  const formData = new FormData();
 
-  // Get presigned URL from our API
+  // If it's a Blob without a name, create a File with proper name
+  if (file instanceof Blob && !(file instanceof File)) {
+    const name = filename || `file-${Date.now()}`;
+    file = new File([file], name, { type: file.type });
+  }
+
+  formData.append('file', file);
+  formData.append('folder', folder);
+
   let response;
   try {
     response = await fetch('/api/upload', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filename: name,
-        contentType: file.type,
-        folder,
-      }),
+      body: formData,
     });
   } catch (err) {
     throw new Error('Nepodařilo se připojit k serveru');
@@ -32,29 +35,10 @@ export async function uploadFile(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to get upload URL');
+    throw new Error(errorData.error || `Upload selhal: ${response.status}`);
   }
 
-  const { uploadUrl, publicUrl, key } = await response.json();
-
-  // Upload directly to R2
-  let uploadResponse;
-  try {
-    uploadResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type,
-      },
-    });
-  } catch (err) {
-    throw new Error('Upload selhal - zkontrolujte CORS nastavení R2 bucketu');
-  }
-
-  if (!uploadResponse.ok) {
-    throw new Error(`Upload selhal: ${uploadResponse.status} ${uploadResponse.statusText}`);
-  }
-
+  const { publicUrl, key } = await response.json();
   return { publicUrl, key };
 }
 
@@ -71,6 +55,5 @@ export async function uploadDataUrl(
 
 // Check if we're in production mode (R2 configured)
 export function isCloudStorageEnabled(): boolean {
-  // In browser, we check by trying to use the API
   return typeof window !== 'undefined';
 }

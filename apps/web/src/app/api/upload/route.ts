@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Check required env vars
 const requiredEnvVars = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_PUBLIC_URL'];
@@ -19,6 +18,7 @@ if (missingEnvVars.length === 0) {
   });
 }
 
+// Server-side upload to bypass CORS issues with presigned URLs
 export async function POST(request: NextRequest) {
   try {
     // Check if R2 is configured
@@ -30,11 +30,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { filename, contentType, folder } = await request.json();
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
+    const folder = (formData.get('folder') as string) || 'uploads';
 
-    if (!filename || !contentType) {
+    if (!file) {
       return NextResponse.json(
-        { error: 'Missing filename or contentType' },
+        { error: 'No file provided' },
         { status: 400 }
       );
     }
@@ -42,29 +44,34 @@ export async function POST(request: NextRequest) {
     // Generate unique filename
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 9);
-    const ext = filename.split('.').pop();
-    const key = `${folder || 'uploads'}/${timestamp}-${randomId}.${ext}`;
+    const ext = file.name.split('.').pop();
+    const key = `${folder}/${timestamp}-${randomId}.${ext}`;
 
-    // Create presigned URL for direct upload
+    // Convert file to buffer
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Upload to R2
     const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
-      ContentType: contentType,
+      Body: buffer,
+      ContentType: file.type,
     });
 
-    const uploadUrl = await getSignedUrl(R2, command, { expiresIn: 3600 });
+    await R2.send(command);
+
     const publicUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
 
     return NextResponse.json({
-      uploadUrl,
       publicUrl,
       key,
     });
   } catch (error) {
     console.error('Upload error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate upload URL' },
+      { error: error instanceof Error ? error.message : 'Upload failed' },
       { status: 500 }
     );
   }
 }
+
