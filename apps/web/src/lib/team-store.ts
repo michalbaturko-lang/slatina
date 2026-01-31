@@ -23,6 +23,28 @@ export interface Player {
   photoUrl?: string;
 }
 
+// Player photo in gallery
+export interface PlayerPhoto {
+  id: string;
+  playerId: string;
+  photoUrl: string;
+  matchId?: string;
+  caption?: string;
+  createdAt: number;
+}
+
+// Player video clip (best moment)
+export interface PlayerClip {
+  id: string;
+  playerId: string;
+  videoId: string;
+  startTime: number;
+  endTime: number;
+  title: string;
+  category: 'goal' | 'assist' | 'skill' | 'defense' | 'other';
+  createdAt: number;
+}
+
 export interface CoachComment {
   id: string;
   videoId: string;
@@ -87,6 +109,8 @@ const FEEDBACK_KEY = 'slatina-feedback';
 const PLAYERS_KEY = 'slatina-players';
 const MATCHES_KEY = 'slatina-matches';
 const GOALS_KEY = 'slatina-goals';
+const PLAYER_PHOTOS_KEY = 'slatina-player-photos';
+const PLAYER_CLIPS_KEY = 'slatina-player-clips';
 
 // Default team configuration - SK Slatina 2017
 const DEFAULT_TEAM: TeamConfig = {
@@ -458,4 +482,68 @@ export function getPlayerStats(playerId: string): PlayerStats {
 export function getAllPlayerStats(): PlayerStats[] {
   const players = getPlayers();
   return players.map(p => getPlayerStats(p.id));
+}
+
+// === PLAYER PHOTO GALLERY ===
+
+export function getPlayerPhotos(playerId?: string): PlayerPhoto[] {
+  if (typeof window === 'undefined') return [];
+  const data = localStorage.getItem(PLAYER_PHOTOS_KEY);
+  const photos: PlayerPhoto[] = data ? JSON.parse(data) : [];
+  return playerId ? photos.filter(p => p.playerId === playerId) : photos;
+}
+
+export function savePlayerPhotos(photos: PlayerPhoto[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PLAYER_PHOTOS_KEY, JSON.stringify(photos));
+  }
+}
+
+export function addPlayerPhoto(photo: Omit<PlayerPhoto, 'id' | 'createdAt'>): PlayerPhoto {
+  const newPhoto: PlayerPhoto = {
+    ...photo,
+    id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: Date.now(),
+  };
+  const photos = getPlayerPhotos();
+  photos.unshift(newPhoto);
+  savePlayerPhotos(photos);
+  return newPhoto;
+}
+
+export function deletePlayerPhoto(id: string): void {
+  const photos = getPlayerPhotos().filter(p => p.id !== id);
+  savePlayerPhotos(photos);
+}
+
+// === PLAYER CLIPS (BEST MOMENTS) ===
+
+export function getPlayerClips(playerId?: string): PlayerClip[] {
+  if (typeof window === 'undefined') return [];
+  const data = localStorage.getItem(PLAYER_CLIPS_KEY);
+  const clips: PlayerClip[] = data ? JSON.parse(data) : [];
+  return playerId ? clips.filter(c => c.playerId === playerId) : clips;
+}
+
+export function savePlayerClips(clips: PlayerClip[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PLAYER_CLIPS_KEY, JSON.stringify(clips));
+  }
+}
+
+export function addPlayerClip(clip: Omit<PlayerClip, 'id' | 'createdAt'>): PlayerClip {
+  const newClip: PlayerClip = {
+    ...clip,
+    id: `clip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: Date.now(),
+  };
+  const clips = getPlayerClips();
+  clips.unshift(newClip);
+  savePlayerClips(clips);
+  return newClip;
+}
+
+export function deletePlayerClip(id: string): void {
+  const clips = getPlayerClips().filter(c => c.id !== id);
+  savePlayerClips(clips);
 }

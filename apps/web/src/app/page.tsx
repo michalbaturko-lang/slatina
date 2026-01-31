@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Video, Brain, Pencil, Upload, Users, ChevronRight } from 'lucide-react';
+import {
+  Video, Pencil, Upload, Users, ChevronRight, Mic, Camera,
+  Share2, MessageSquare, Trophy, Clock, Palette, UserCircle,
+  Play, Target, FileText, Download, Smartphone
+} from 'lucide-react';
 
 export default function Home() {
   return (
@@ -26,8 +30,8 @@ export default function Home() {
             Platforma pro analýzu sportovních videí
           </p>
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-12">
-            Nahrávejte videa ze zápasů, analyzujte herní situace pomocí inteligentní tužky,
-            a nechte AI identifikovat klíčové momenty pro zlepšení vašeho týmu.
+            Nahrávejte videa ze zápasů, kreslte přímo na video, přidávejte hlasové komentáře
+            a sdílejte analýzy s hráči a rodiči.
           </p>
 
           {/* Demo notice */}
@@ -61,22 +65,67 @@ export default function Home() {
       {/* Features Section */}
       <section className="py-20 px-4 bg-gray-800/50">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Klíčové funkce</h2>
-          <div className="grid md:grid-cols-3 gap-8">
+          <h2 className="text-3xl font-bold text-center mb-12">Co to umí</h2>
+          <div className="grid md:grid-cols-4 sm:grid-cols-2 gap-6">
             <FeatureCard
-              icon={<Pencil className="w-6 h-6" />}
-              title="Inteligentní tužka"
-              description="Kreslte přímo na video - šipky, kruhy, hráčské značky. Přidávejte hlasové komentáře k jednotlivým situacím."
+              icon={<Pencil className="w-5 h-5" />}
+              title="Kreslení na video"
+              description="Šipky, kruhy, čáry - kreslte přímo na video a vysvětlujte situace"
             />
             <FeatureCard
-              icon={<Brain className="w-6 h-6" />}
-              title="AI analýza"
-              description="Automatická detekce taktických situací - chumel hráčů, chybějící nabídka, ztráta hráče při bránění."
+              icon={<Mic className="w-5 h-5" />}
+              title="Hlasové komentáře"
+              description="Nahrávejte komentáře k situacím s automatickým přepisem"
             />
             <FeatureCard
-              icon={<Users className="w-6 h-6" />}
-              title="Pro mládežnický fotbal"
-              description="Speciálně navrženo pro trenéry mládeže. Čtverec, nabídka, bránění - vše s českými tipy pro hráče."
+              icon={<Camera className="w-5 h-5" />}
+              title="Screenshoty"
+              description="Pořizujte snímky důležitých momentů včetně anotací"
+            />
+            <FeatureCard
+              icon={<Share2 className="w-5 h-5" />}
+              title="Sdílení"
+              description="Sdílejte screenshoty a shrnutí přes WhatsApp, email..."
+            />
+            <FeatureCard
+              icon={<Clock className="w-5 h-5" />}
+              title="Timeline značky"
+              description="Komentáře, screenshoty a nahrávky na časové ose"
+            />
+            <FeatureCard
+              icon={<MessageSquare className="w-5 h-5" />}
+              title="Textové poznámky"
+              description="Přidávejte komentáře k jednotlivým časům ve videu"
+            />
+            <FeatureCard
+              icon={<UserCircle className="w-5 h-5" />}
+              title="Profily hráčů"
+              description="Evidence hráčů s fotkami, pozicemi a statistikami"
+            />
+            <FeatureCard
+              icon={<Trophy className="w-5 h-5" />}
+              title="Zápasy a turnaje"
+              description="Evidence zápasů, výsledků a připojení videí"
+            />
+            <FeatureCard
+              icon={<Target className="w-5 h-5" />}
+              title="Góly a asistence"
+              description="Zaznamenávejte střelce a nahrávače"
+            />
+            <FeatureCard
+              icon={<Users className="w-5 h-5" />}
+              title="Tagování hráčů"
+              description="Označujte hráče v komentářích a situacích"
+            />
+            <FeatureCard
+              icon={<Palette className="w-5 h-5" />}
+              title="Barvy a nástroje"
+              description="Volba barev, tloušťky čáry, guma, reset"
+            />
+            <FeatureCard
+              icon={<Smartphone className="w-5 h-5" />}
+              title="Mobilní design"
+              description="Optimalizováno pro telefony i tablety"
             />
           </div>
         </div>
@@ -85,27 +134,32 @@ export default function Home() {
       {/* How it works */}
       <section className="py-20 px-4">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Jak to funguje</h2>
-          <div className="grid md:grid-cols-4 gap-6">
+          <h2 className="text-3xl font-bold text-center mb-12">Jak na to</h2>
+          <div className="grid md:grid-cols-5 gap-4">
             <StepCard
               number={1}
-              title="Nahrajte video"
-              description="Nahrajte záznam ze zápasu nebo tréninku"
+              title="Nahraj video"
+              description="Vyber video ze zápasu nebo tréninku z telefonu či počítače"
             />
             <StepCard
               number={2}
-              title="AI analýza"
-              description="Systém automaticky detekuje situace"
+              title="Vyplň info"
+              description="Zvol zápas/trénink, zadej výsledek a vyber protihráče"
             />
             <StepCard
               number={3}
-              title="Ověřte a upravte"
-              description="Potvrďte správné detekce, opravte chyby"
+              title="Analyzuj"
+              description="Kresli na video, nahrávej komentáře, pořizuj screenshoty"
             />
             <StepCard
               number={4}
-              title="Trénujte"
-              description="Použijte tipy pro zlepšení hráčů"
+              title="Taguj hráče"
+              description="Označ hráče, kterých se situace týká"
+            />
+            <StepCard
+              number={5}
+              title="Sdílej"
+              description="Pošli shrnutí nebo screenshoty rodičům a hráčům"
             />
           </div>
         </div>
@@ -152,12 +206,14 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="p-6 bg-gray-800 rounded-xl border border-gray-700 hover:border-gray-600 transition">
-      <div className="w-12 h-12 bg-blue-600/20 text-blue-400 rounded-lg flex items-center justify-center mb-4">
-        {icon}
+    <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-blue-600 transition">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="w-9 h-9 bg-blue-600/20 text-blue-400 rounded-lg flex items-center justify-center flex-shrink-0">
+          {icon}
+        </div>
+        <h3 className="font-semibold">{title}</h3>
       </div>
-      <h3 className="text-xl font-semibold mb-2">{title}</h3>
-      <p className="text-gray-400">{description}</p>
+      <p className="text-gray-400 text-sm">{description}</p>
     </div>
   );
 }
@@ -172,12 +228,16 @@ function StepCard({
   description: string;
 }) {
   return (
-    <div className="text-center">
-      <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
+    <div className="text-center relative">
+      {/* Connector line */}
+      {number < 5 && (
+        <div className="hidden md:block absolute top-6 left-1/2 w-full h-0.5 bg-gray-700" />
+      )}
+      <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3 relative z-10">
         {number}
       </div>
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
-      <p className="text-gray-400 text-sm">{description}</p>
+      <h3 className="font-semibold mb-1">{title}</h3>
+      <p className="text-gray-400 text-xs">{description}</p>
     </div>
   );
 }

@@ -18,6 +18,13 @@ import {
   ZoomOut,
   Move,
   RotateCcw,
+  Image as ImageIcon,
+  Film,
+  Share2,
+  QrCode,
+  Plus,
+  Trash2,
+  Play,
 } from 'lucide-react';
 import {
   getPlayerById,
@@ -26,11 +33,20 @@ import {
   getGoalsForPlayer,
   getCommentsForPlayer,
   updatePlayer,
+  getPlayerPhotos,
+  addPlayerPhoto,
+  deletePlayerPhoto,
+  getPlayerClips,
+  addPlayerClip,
+  deletePlayerClip,
+  getMatches,
   Player,
   PlayerStats,
   Match,
   Goal,
   CoachComment,
+  PlayerPhoto,
+  PlayerClip,
 } from '@/lib/team-store';
 import { getVideo } from '@/lib/demo-store';
 
@@ -267,8 +283,12 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
   const [matches, setMatches] = useState<Match[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [comments, setComments] = useState<CoachComment[]>([]);
-  const [activeTab, setActiveTab] = useState<'matches' | 'goals' | 'comments'>('matches');
+  const [photos, setPhotos] = useState<PlayerPhoto[]>([]);
+  const [clips, setClips] = useState<PlayerClip[]>([]);
+  const [allMatches, setAllMatches] = useState<Match[]>([]);
+  const [activeTab, setActiveTab] = useState<'matches' | 'goals' | 'comments' | 'gallery' | 'clips'>('matches');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // Edit states
   const [isEditingNumber, setIsEditingNumber] = useState(false);
@@ -281,6 +301,17 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
   // Photo crop state
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
 
+  // Gallery photo add
+  const [pendingGalleryPhoto, setPendingGalleryPhoto] = useState<string | null>(null);
+  const [galleryPhotoCaption, setGalleryPhotoCaption] = useState('');
+  const [galleryPhotoMatch, setGalleryPhotoMatch] = useState('');
+
+  // QR code modal
+  const [showQRModal, setShowQRModal] = useState(false);
+
+  // Photo viewer
+  const [viewingPhoto, setViewingPhoto] = useState<PlayerPhoto | null>(null);
+
   useEffect(() => {
     const loadData = () => {
       const p = getPlayerById(params.id);
@@ -290,6 +321,9 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
         setMatches(getMatchesForPlayer(p.id));
         setGoals(getGoalsForPlayer(p.id));
         setComments(getCommentsForPlayer(p.id));
+        setPhotos(getPlayerPhotos(p.id));
+        setClips(getPlayerClips(p.id));
+        setAllMatches(getMatches());
       }
     };
     loadData();
@@ -326,6 +360,79 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
       setPlayer(updated);
     }
     setPendingPhoto(null);
+  };
+
+  // Gallery photo handling
+  const handleGalleryPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !player) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Prosím vyberte obrázek');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Obrázek je příliš velký (max 10MB)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPendingGalleryPhoto(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const saveGalleryPhoto = () => {
+    if (!player || !pendingGalleryPhoto) return;
+    const photo = addPlayerPhoto({
+      playerId: player.id,
+      photoUrl: pendingGalleryPhoto,
+      matchId: galleryPhotoMatch || undefined,
+      caption: galleryPhotoCaption || undefined,
+    });
+    setPhotos([photo, ...photos]);
+    setPendingGalleryPhoto(null);
+    setGalleryPhotoCaption('');
+    setGalleryPhotoMatch('');
+  };
+
+  const handleDeletePhoto = (photoId: string) => {
+    if (!confirm('Opravdu smazat fotku?')) return;
+    deletePlayerPhoto(photoId);
+    setPhotos(photos.filter(p => p.id !== photoId));
+  };
+
+  const handleDeleteClip = (clipId: string) => {
+    if (!confirm('Opravdu smazat klip?')) return;
+    deletePlayerClip(clipId);
+    setClips(clips.filter(c => c.id !== clipId));
+  };
+
+  // QR code generation
+  const getProfileUrl = () => {
+    if (typeof window === 'undefined') return '';
+    return `${window.location.origin}/players/${params.id}`;
+  };
+
+  const handleShare = async () => {
+    const url = getProfileUrl();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${player?.name} - SK Slatina 2017`,
+          text: `Profil hráče ${player?.name}`,
+          url,
+        });
+      } catch (e) {
+        // User cancelled
+      }
+    } else {
+      await navigator.clipboard.writeText(url);
+      alert('Odkaz zkopírován do schránky!');
+    }
   };
 
   const saveNumber = () => {
@@ -396,7 +503,41 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           <Link href="/players" style={{ padding: 8, color: 'white' }}>
             <ArrowLeft size={20} />
           </Link>
-          <h1 style={{ fontWeight: 600, fontSize: 18 }}>Profil hráče</h1>
+          <h1 style={{ fontWeight: 600, fontSize: 18, flex: 1 }}>Profil hráče</h1>
+          <button
+            onClick={() => setShowQRModal(true)}
+            style={{
+              padding: 8,
+              backgroundColor: '#374151',
+              borderRadius: 8,
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="QR kód"
+          >
+            <QrCode size={20} />
+          </button>
+          <button
+            onClick={handleShare}
+            style={{
+              padding: 8,
+              backgroundColor: '#2563eb',
+              borderRadius: 8,
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Sdílet"
+          >
+            <Share2 size={20} />
+          </button>
         </div>
       </header>
 
@@ -688,20 +829,24 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
         {/* Tabs */}
         <div style={{
           display: 'flex',
-          gap: 8,
+          gap: 6,
           marginBottom: 16,
+          overflowX: 'auto',
+          paddingBottom: 4,
         }}>
           {[
-            { key: 'matches', label: 'Zápasy', count: matches.length, icon: <Trophy size={16} /> },
-            { key: 'goals', label: 'Góly', count: goals.length, icon: <Target size={16} /> },
-            { key: 'comments', label: 'Komentáře', count: comments.length, icon: <MessageSquare size={16} /> },
+            { key: 'matches', label: 'Zápasy', count: matches.length, icon: <Trophy size={14} /> },
+            { key: 'goals', label: 'Góly', count: goals.length, icon: <Target size={14} /> },
+            { key: 'gallery', label: 'Galerie', count: photos.length, icon: <ImageIcon size={14} /> },
+            { key: 'clips', label: 'Momenty', count: clips.length, icon: <Film size={14} /> },
+            { key: 'comments', label: 'Komentáře', count: comments.length, icon: <MessageSquare size={14} /> },
           ].map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
               style={{
-                flex: 1,
-                padding: '12px 16px',
+                flex: '0 0 auto',
+                padding: '10px 14px',
                 borderRadius: 8,
                 border: 'none',
                 backgroundColor: activeTab === tab.key ? '#2563eb' : '#1f2937',
@@ -710,7 +855,9 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 8,
+                gap: 6,
+                fontSize: 13,
+                whiteSpace: 'nowrap',
               }}
             >
               {tab.icon}
@@ -852,6 +999,195 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
               })
             )
           )}
+
+          {activeTab === 'gallery' && (
+            <>
+              {/* Add photo button */}
+              <button
+                onClick={() => galleryInputRef.current?.click()}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  borderRadius: 12,
+                  border: '2px dashed #374151',
+                  backgroundColor: 'transparent',
+                  color: '#9ca3af',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
+                <Plus size={20} />
+                Přidat fotku
+              </button>
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleGalleryPhotoSelect}
+                style={{ display: 'none' }}
+              />
+
+              {photos.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>
+                  Zatím žádné fotky v galerii
+                </p>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 8,
+                }}>
+                  {photos.map(photo => {
+                    const match = allMatches.find(m => m.id === photo.matchId);
+                    return (
+                      <div
+                        key={photo.id}
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '1',
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setViewingPhoto(photo)}
+                      >
+                        <img
+                          src={photo.photoUrl}
+                          alt={photo.caption || 'Fotka'}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                        {match && (
+                          <div style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            padding: 4,
+                            backgroundColor: 'rgba(0,0,0,0.7)',
+                            fontSize: 10,
+                            color: 'white',
+                            textAlign: 'center',
+                          }}>
+                            {match.opponent || match.name}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'clips' && (
+            <>
+              {clips.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>
+                  <Film size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
+                  <p>Zatím žádné klipy</p>
+                  <p style={{ fontSize: 12, marginTop: 8 }}>
+                    Klipy můžeš přidat při sledování videa
+                  </p>
+                </div>
+              ) : (
+                clips.map(clip => {
+                  const video = getVideo(clip.videoId);
+                  const categoryColors: Record<string, string> = {
+                    goal: '#22c55e',
+                    assist: '#60a5fa',
+                    skill: '#a855f7',
+                    defense: '#f59e0b',
+                    other: '#6b7280',
+                  };
+                  const categoryLabels: Record<string, string> = {
+                    goal: 'Gól',
+                    assist: 'Asistence',
+                    skill: 'Technika',
+                    defense: 'Obrana',
+                    other: 'Jiné',
+                  };
+                  return (
+                    <div
+                      key={clip.id}
+                      style={{
+                        backgroundColor: '#1f2937',
+                        borderRadius: 12,
+                        padding: 16,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 8,
+                        backgroundColor: categoryColors[clip.category] + '20',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: categoryColors[clip.category],
+                      }}>
+                        <Play size={24} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 500 }}>{clip.title}</div>
+                        <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                          <span style={{
+                            backgroundColor: categoryColors[clip.category] + '30',
+                            color: categoryColors[clip.category],
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            fontSize: 10,
+                          }}>
+                            {categoryLabels[clip.category]}
+                          </span>
+                          <span>{formatTime(clip.startTime)} - {formatTime(clip.endTime)}</span>
+                        </div>
+                      </div>
+                      <Link
+                        href={`/videos/${clip.videoId}?t=${clip.startTime}`}
+                        style={{
+                          padding: '8px 12px',
+                          backgroundColor: '#2563eb',
+                          borderRadius: 8,
+                          color: 'white',
+                          fontSize: 12,
+                          textDecoration: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Play size={14} />
+                        Přehrát
+                      </Link>
+                      <button
+                        onClick={() => handleDeleteClip(clip.id)}
+                        style={{
+                          padding: 8,
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#6b7280',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
         </div>
       </main>
 
@@ -862,6 +1198,293 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           onSave={handlePhotoCropSave}
           onCancel={() => setPendingPhoto(null)}
         />
+      )}
+
+      {/* Gallery Photo Add Modal */}
+      {pendingGalleryPhoto && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100,
+          padding: 16,
+        }}>
+          <div style={{
+            backgroundColor: '#1f2937',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 400,
+            width: '100%',
+          }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>
+              Přidat fotku do galerie
+            </h3>
+
+            <img
+              src={pendingGalleryPhoto}
+              alt="Náhled"
+              style={{
+                width: '100%',
+                borderRadius: 8,
+                marginBottom: 16,
+                maxHeight: 200,
+                objectFit: 'cover',
+              }}
+            />
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+                Popisek (volitelné)
+              </label>
+              <input
+                type="text"
+                value={galleryPhotoCaption}
+                onChange={e => setGalleryPhotoCaption(e.target.value)}
+                placeholder="Např. Gól proti Prace"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #374151',
+                  backgroundColor: '#374151',
+                  color: 'white',
+                  fontSize: 14,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+                Zápas (volitelné)
+              </label>
+              <select
+                value={galleryPhotoMatch}
+                onChange={e => setGalleryPhotoMatch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #374151',
+                  backgroundColor: '#374151',
+                  color: 'white',
+                  fontSize: 14,
+                }}
+              >
+                <option value="">Vyberte zápas...</option>
+                {allMatches.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} {m.opponent && `vs. ${m.opponent}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => {
+                  setPendingGalleryPhoto(null);
+                  setGalleryPhotoCaption('');
+                  setGalleryPhotoMatch('');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#374151',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              >
+                Zrušit
+              </button>
+              <button
+                onClick={saveGalleryPhoto}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#22c55e',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              >
+                Uložit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo Viewer Modal */}
+      {viewingPhoto && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.95)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16,
+          }}
+          onClick={() => setViewingPhoto(null)}
+        >
+          <img
+            src={viewingPhoto.photoUrl}
+            alt={viewingPhoto.caption || 'Fotka'}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '80vh',
+              objectFit: 'contain',
+              borderRadius: 8,
+            }}
+            onClick={e => e.stopPropagation()}
+          />
+          {viewingPhoto.caption && (
+            <p style={{ marginTop: 16, color: 'white', textAlign: 'center' }}>
+              {viewingPhoto.caption}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeletePhoto(viewingPhoto.id);
+                setViewingPhoto(null);
+              }}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: '#ef4444',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Trash2 size={16} />
+              Smazat
+            </button>
+            <button
+              onClick={() => setViewingPhoto(null)}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: '#374151',
+                color: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Zavřít
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16,
+          }}
+          onClick={() => setShowQRModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#1f2937',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 320,
+              width: '100%',
+              textAlign: 'center',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+              Sdílet profil
+            </h3>
+            <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 16 }}>
+              Naskenuj QR kód pro zobrazení profilu
+            </p>
+
+            {/* QR Code using Google Charts API */}
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: 12,
+              padding: 16,
+              display: 'inline-block',
+              marginBottom: 16,
+            }}>
+              <img
+                src={`https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(getProfileUrl())}&choe=UTF-8`}
+                alt="QR kód"
+                style={{ width: 200, height: 200 }}
+              />
+            </div>
+
+            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 16, wordBreak: 'break-all' }}>
+              {getProfileUrl()}
+            </p>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(getProfileUrl());
+                  alert('Odkaz zkopírován!');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#2563eb',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              >
+                Kopírovat odkaz
+              </button>
+              <button
+                onClick={() => setShowQRModal(false)}
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#374151',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              >
+                Zavřít
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
