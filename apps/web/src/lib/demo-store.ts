@@ -214,8 +214,28 @@ export function generateMockAIEvents(duration: number, sport: string = 'football
     },
   ];
 
-  // Generuj 1 event každých 30-60 sekund
-  let time = 15 + Math.random() * 30;
+  // Pro krátká videa (< 30s) - vygeneruj 2-3 eventy
+  if (duration < 30) {
+    const numEvents = Math.min(3, Math.max(2, Math.floor(duration / 5)));
+    for (let i = 0; i < numEvents; i++) {
+      const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+      const time = (duration / (numEvents + 1)) * (i + 1);
+      events.push({
+        id: `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: eventType.type,
+        label: eventType.label,
+        labelCz: eventType.labelCz,
+        time: Math.max(0.5, time),
+        confidence: 0.7 + Math.random() * 0.25,
+        severity: eventType.severity,
+        coachingTips: eventType.coachingTips,
+      });
+    }
+    return events.sort((a, b) => a.time - b.time);
+  }
+
+  // Pro delší videa - 1 event každých 30-60 sekund
+  let time = 15 + Math.random() * 15;
   while (time < duration - 10) {
     const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
     events.push({
@@ -229,7 +249,7 @@ export function generateMockAIEvents(duration: number, sport: string = 'football
       coachingTips: eventType.coachingTips,
     });
 
-    time += 30 + Math.random() * 60;
+    time += 30 + Math.random() * 30;
   }
 
   return events.sort((a, b) => a.time - b.time);
