@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -12,6 +12,12 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
+import {
+  addVideo,
+  saveVideoBlob,
+  simulateAIAnalysis,
+  DemoVideo,
+} from '@/lib/demo-store';
 
 interface UploadProgress {
   loaded: number;
@@ -19,7 +25,7 @@ interface UploadProgress {
   percentage: number;
 }
 
-type UploadStatus = 'idle' | 'uploading' | 'processing' | 'complete' | 'error';
+type UploadStatus = 'idle' | 'uploading' | 'processing' | 'analyzing' | 'complete' | 'error';
 
 export default function UploadPage() {
   const router = useRouter();
@@ -29,6 +35,7 @@ export default function UploadPage() {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState<UploadProgress>({ loaded: 0, total: 0, percentage: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number>(0);
 
   // Form fields
   const [title, setTitle] = useState('');
@@ -53,6 +60,7 @@ export default function UploadPage() {
       if (file.type.startsWith('video/')) {
         setSelectedFile(file);
         setError(null);
+        getVideoDuration(file);
 
         // Auto-fill title from filename
         if (!title) {
@@ -71,6 +79,7 @@ export default function UploadPage() {
       const file = files[0];
       setSelectedFile(file);
       setError(null);
+      getVideoDuration(file);
 
       if (!title) {
         const nameWithoutExt = file.name.replace(/\.[^.]+$/, '');
@@ -78,6 +87,16 @@ export default function UploadPage() {
       }
     }
   }, [title]);
+
+  const getVideoDuration = (file: File) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      setVideoDuration(video.duration);
+      URL.revokeObjectURL(video.src);
+    };
+    video.src = URL.createObjectURL(file);
+  };
 
   const handleUpload = async () => {
     if (!selectedFile || !title) {
@@ -89,101 +108,58 @@ export default function UploadPage() {
     setError(null);
 
     try {
-      // Get presigned URL from API
-      const response = await fetch('/api/videos/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: selectedFile.name,
-          contentType: selectedFile.type,
-          metadata: {
-            title,
-            opponent,
-            matchDate,
-            description,
-            sport,
-            enableAI,
-          },
-        }),
-      });
+      // Simulate upload progress
+      const totalSize = selectedFile.size;
+      let uploaded = 0;
+      const chunkSize = totalSize / 10;
 
-      if (!response.ok) {
-        throw new Error('Nepodařilo se získat upload URL');
-      }
-
-      const { uploadUrl, videoId } = await response.json();
-
-      // Upload file directly to S3
-      const xhr = new XMLHttpRequest();
-
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
+      const uploadSimulation = async () => {
+        while (uploaded < totalSize) {
+          await new Promise(r => setTimeout(r, 200));
+          uploaded = Math.min(uploaded + chunkSize, totalSize);
           setProgress({
-            loaded: e.loaded,
-            total: e.total,
-            percentage: Math.round((e.loaded / e.total) * 100),
+            loaded: uploaded,
+            total: totalSize,
+            percentage: Math.round((uploaded / totalSize) * 100),
           });
         }
+      };
+
+      await uploadSimulation();
+
+      setStatus('processing');
+
+      // Create video record
+      const newVideo = addVideo({
+        title,
+        opponent: opponent || undefined,
+        date: matchDate || new Date().toISOString().split('T')[0],
+        duration: videoDuration,
+        sport,
+        status: 'processing',
+        uploadProgress: 100,
       });
 
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setStatus('processing');
+      // Save video blob to IndexedDB
+      await saveVideoBlob(newVideo.id, selectedFile);
 
-          // Poll for processing status
-          pollProcessingStatus(videoId);
-        } else {
-          throw new Error('Upload selhal');
-        }
-      });
+      if (enableAI) {
+        setStatus('analyzing');
+        // Simulate AI analysis
+        await simulateAIAnalysis(newVideo.id, videoDuration, (aiProgress) => {
+          setProgress(prev => ({ ...prev, percentage: aiProgress }));
+        });
+      }
 
-      xhr.addEventListener('error', () => {
-        throw new Error('Upload selhal - chyba sítě');
-      });
-
-      xhr.open('PUT', uploadUrl);
-      xhr.setRequestHeader('Content-Type', selectedFile.type);
-      xhr.send(selectedFile);
+      setStatus('complete');
+      setTimeout(() => {
+        router.push(`/videos/${newVideo.id}`);
+      }, 1500);
 
     } catch (err) {
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Neznámá chyba');
     }
-  };
-
-  const pollProcessingStatus = async (videoId: string) => {
-    const maxAttempts = 60; // 5 minutes max
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/videos/${videoId}/status`);
-        const data = await response.json();
-
-        if (data.status === 'ready') {
-          setStatus('complete');
-          setTimeout(() => {
-            router.push(`/videos/${videoId}`);
-          }, 2000);
-        } else if (data.status === 'error') {
-          setStatus('error');
-          setError(data.error || 'Zpracování videa selhalo');
-        } else if (attempts < maxAttempts) {
-          attempts++;
-          setTimeout(poll, 5000);
-        } else {
-          setStatus('error');
-          setError('Zpracování trvá příliš dlouho');
-        }
-      } catch (err) {
-        attempts++;
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 5000);
-        }
-      }
-    };
-
-    poll();
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -198,7 +174,7 @@ export default function UploadPage() {
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href="/dashboard" className="p-2 hover:bg-gray-800 rounded-lg transition">
+          <Link href="/videos" className="p-2 hover:bg-gray-800 rounded-lg transition">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <h1 className="text-xl font-semibold">Nahrát video</h1>
@@ -206,6 +182,14 @@ export default function UploadPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Demo notice */}
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
+          <p className="text-sm text-blue-300">
+            <strong>Demo verze:</strong> Video se ukládá lokálně ve vašem prohlížeči (IndexedDB).
+            Data zůstanou zachována i po zavření prohlížeče.
+          </p>
+        </div>
+
         {/* Upload area */}
         <div
           className={`
@@ -233,13 +217,17 @@ export default function UploadPage() {
               <Video className="w-12 h-12 text-blue-400" />
               <div className="text-left">
                 <p className="font-medium">{selectedFile.name}</p>
-                <p className="text-sm text-gray-400">{formatFileSize(selectedFile.size)}</p>
+                <p className="text-sm text-gray-400">
+                  {formatFileSize(selectedFile.size)}
+                  {videoDuration > 0 && ` • ${Math.floor(videoDuration / 60)}:${Math.floor(videoDuration % 60).toString().padStart(2, '0')}`}
+                </p>
               </div>
               {status === 'idle' && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedFile(null);
+                    setVideoDuration(0);
                   }}
                   className="p-2 hover:bg-gray-700 rounded-lg transition"
                 >
@@ -253,7 +241,7 @@ export default function UploadPage() {
               <p className="text-lg mb-2">Přetáhněte video sem</p>
               <p className="text-sm text-gray-400">nebo klikněte pro výběr souboru</p>
               <p className="text-xs text-gray-500 mt-4">
-                Podporované formáty: MP4, MOV, AVI, MKV (max 10 GB)
+                Podporované formáty: MP4, MOV, AVI, MKV, WebM
               </p>
             </>
           )}
@@ -266,13 +254,19 @@ export default function UploadPage() {
               {status === 'uploading' && (
                 <>
                   <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
-                  <span>Nahrávání... {progress.percentage}%</span>
+                  <span>Ukládání... {progress.percentage}%</span>
                 </>
               )}
               {status === 'processing' && (
                 <>
                   <Loader2 className="w-6 h-6 text-yellow-400 animate-spin" />
                   <span>Zpracování videa...</span>
+                </>
+              )}
+              {status === 'analyzing' && (
+                <>
+                  <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                  <span>AI analýza... {progress.percentage}%</span>
                 </>
               )}
               {status === 'complete' && (
@@ -289,10 +283,12 @@ export default function UploadPage() {
               )}
             </div>
 
-            {status === 'uploading' && (
+            {(status === 'uploading' || status === 'analyzing') && (
               <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-blue-500 transition-all duration-300"
+                  className={`h-full transition-all duration-300 ${
+                    status === 'analyzing' ? 'bg-purple-500' : 'bg-blue-500'
+                  }`}
                   style={{ width: `${progress.percentage}%` }}
                 />
               </div>
@@ -310,7 +306,7 @@ export default function UploadPage() {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="např. Zápas vs. Sparta Praha U15"
+              placeholder="např. Zápas vs. Sparta Praha U9"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
               disabled={status !== 'idle'}
             />
@@ -386,7 +382,7 @@ export default function UploadPage() {
 
           <div className="flex justify-end gap-4 pt-4">
             <Link
-              href="/dashboard"
+              href="/videos"
               className="px-6 py-3 text-gray-400 hover:text-white transition"
             >
               Zrušit

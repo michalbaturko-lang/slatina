@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Play,
@@ -26,8 +27,10 @@ import {
   ChevronDown,
   Trash2,
   MousePointer,
-  Move,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
+import { getVideo, getVideoBlob, updateVideo, DemoVideo, AIEvent } from '@/lib/demo-store';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'text' | 'playerX' | 'playerO';
 
@@ -47,19 +50,18 @@ interface Annotation {
   endTime: number;
 }
 
-interface AIEvent {
-  id: string;
-  type: string;
-  label: string;
-  time: number;
-  confidence: number;
-  verified?: boolean;
-}
-
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ffffff'];
 const STROKE_WIDTHS = [2, 4, 6, 8];
 
 export default function VideoDetailPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
+
+  // Video data
+  const [video, setVideo] = useState<DemoVideo | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Video state
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -84,14 +86,46 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   // AI events
-  const [aiEvents, setAiEvents] = useState<AIEvent[]>([
-    { id: '1', type: 'shot', label: 'Střela na branku', time: 125.5, confidence: 0.92, verified: undefined },
-    { id: '2', type: 'pass', label: 'Klíčová přihrávka', time: 340.2, confidence: 0.87, verified: undefined },
-    { id: '3', type: 'sprint', label: 'Sprint útočníka', time: 512.8, confidence: 0.78, verified: undefined },
-    { id: '4', type: 'formation', label: 'Změna formace', time: 678.3, confidence: 0.85, verified: undefined },
-  ]);
-
+  const [aiEvents, setAiEvents] = useState<AIEvent[]>([]);
   const [showAIPanel, setShowAIPanel] = useState(true);
+
+  // Load video data
+  useEffect(() => {
+    const loadVideoData = async () => {
+      try {
+        const videoData = getVideo(params.id);
+        if (!videoData) {
+          setError('Video nebylo nalezeno');
+          setLoading(false);
+          return;
+        }
+
+        setVideo(videoData);
+        setAiEvents(videoData.aiEvents || []);
+
+        // Load video blob
+        const blob = await getVideoBlob(params.id);
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          setVideoUrl(url);
+        }
+
+        setLoading(false);
+      } catch (err) {
+        setError('Chyba při načítání videa');
+        setLoading(false);
+      }
+    };
+
+    loadVideoData();
+
+    // Cleanup
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
+  }, [params.id]);
 
   // Video controls
   const togglePlay = useCallback(() => {
@@ -216,7 +250,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         mediaRecorder.onstop = () => {
           const blob = new Blob(chunks, { type: 'audio/webm' });
           console.log('Recording saved:', blob);
-          // TODO: Upload to server
+          // TODO: Save to IndexedDB
         };
 
         mediaRecorder.start();
@@ -229,17 +263,17 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
   // Screenshot
   const captureScreenshot = useCallback(() => {
-    const video = videoRef.current;
+    const videoEl = videoRef.current;
     const annotationCanvas = canvasRef.current;
-    if (!video || !annotationCanvas) return;
+    if (!videoEl || !annotationCanvas) return;
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
     const ctx = canvas.getContext('2d')!;
 
     // Draw video
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(videoEl, 0, 0);
 
     // Draw annotations
     ctx.drawImage(annotationCanvas, 0, 0, canvas.width, canvas.height);
@@ -256,8 +290,38 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     setAiEvents((prev) =>
       prev.map((e) => (e.id === eventId ? { ...e, verified: isCorrect } : e))
     );
-    // TODO: Send feedback to API
-  }, []);
+
+    // Save to demo store
+    if (video) {
+      const updatedEvents = aiEvents.map((e) =>
+        e.id === eventId ? { ...e, verified: isCorrect } : e
+      );
+      updateVideo(video.id, { aiEvents: updatedEvents });
+    }
+  }, [video, aiEvents]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+      </div>
+    );
+  }
+
+  if (error || !video) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center gap-4">
+        <AlertCircle className="w-12 h-12 text-red-400" />
+        <p className="text-lg">{error || 'Video nebylo nalezeno'}</p>
+        <Link
+          href="/videos"
+          className="text-blue-400 hover:text-blue-300 transition"
+        >
+          Zpět na seznam videí
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
@@ -265,12 +329,15 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-[1800px] mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="p-2 hover:bg-gray-800 rounded-lg transition">
+            <Link href="/videos" className="p-2 hover:bg-gray-800 rounded-lg transition">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="font-semibold">Zápas vs. Sparta Praha U15</h1>
-              <p className="text-sm text-gray-400">28. ledna 2024</p>
+              <h1 className="font-semibold">{video.title}</h1>
+              <p className="text-sm text-gray-400">
+                {new Date(video.date).toLocaleDateString('cs-CZ')}
+                {video.opponent && ` • vs. ${video.opponent}`}
+              </p>
             </div>
           </div>
 
@@ -286,10 +353,6 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               <Download className="w-4 h-4" />
               Export klip
             </button>
-            <button className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition">
-              <Share2 className="w-4 h-4" />
-              Sdílet
-            </button>
           </div>
         </div>
       </header>
@@ -303,15 +366,21 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             className="relative flex-1 bg-black flex items-center justify-center"
           >
             <div className="relative w-full max-w-[1400px] aspect-video">
-              <video
-                ref={videoRef}
-                className="w-full h-full"
-                src="/sample-video.mp4"
-                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-              />
+              {videoUrl ? (
+                <video
+                  ref={videoRef}
+                  className="w-full h-full"
+                  src={videoUrl}
+                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                  onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                  <p className="text-gray-400">Video není k dispozici</p>
+                </div>
+              )}
               <canvas
                 ref={canvasRef}
                 className="absolute inset-0 w-full h-full cursor-crosshair"
@@ -327,7 +396,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
 
           {/* Toolbar */}
           <div className="bg-gray-900 border-t border-gray-800 p-3">
-            <div className="flex items-center justify-between max-w-[1400px] mx-auto">
+            <div className="flex items-center justify-between max-w-[1400px] mx-auto flex-wrap gap-3">
               {/* Drawing tools */}
               <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
                 <ToolButton
@@ -472,10 +541,13 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                   {aiEvents.map((event) => (
                     <button
                       key={event.id}
-                      className="absolute w-2 h-2 bg-purple-500 rounded-full transform -translate-x-1/2 hover:scale-150 transition"
+                      className={`absolute w-2 h-2 rounded-full transform -translate-x-1/2 hover:scale-150 transition ${
+                        event.severity === 'critical' ? 'bg-red-500' :
+                        event.severity === 'warning' ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
                       style={{ left: `${(event.time / duration) * 100}%` }}
                       onClick={() => seek(event.time)}
-                      title={event.label}
+                      title={event.labelCz || event.label}
                     />
                   ))}
                 </div>
@@ -559,12 +631,12 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         </div>
 
         {/* AI Events Panel */}
-        {showAIPanel && (
+        {showAIPanel && aiEvents.length > 0 && (
           <div className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col">
             <div className="p-4 border-b border-gray-800 flex items-center justify-between">
               <h2 className="font-semibold flex items-center gap-2">
                 <Brain className="w-5 h-5 text-purple-400" />
-                AI Události
+                AI Události ({aiEvents.length})
               </h2>
               <button
                 onClick={() => setShowAIPanel(false)}
@@ -583,21 +655,28 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <div className="font-medium">{event.label}</div>
+                      <div className="font-medium">{event.labelCz || event.label}</div>
                       <div className="text-sm text-gray-400">{formatTime(event.time)}</div>
                     </div>
                     <span
                       className={`text-xs px-2 py-1 rounded ${
-                        event.confidence >= 0.9
-                          ? 'bg-green-500/20 text-green-400'
-                          : event.confidence >= 0.8
+                        event.severity === 'critical'
+                          ? 'bg-red-500/20 text-red-400'
+                          : event.severity === 'warning'
                           ? 'bg-yellow-500/20 text-yellow-400'
-                          : 'bg-orange-500/20 text-orange-400'
+                          : 'bg-green-500/20 text-green-400'
                       }`}
                     >
                       {Math.round(event.confidence * 100)}%
                     </span>
                   </div>
+
+                  {/* Coaching tips */}
+                  {event.coachingTips && event.coachingTips.length > 0 && (
+                    <div className="text-sm text-gray-300 mb-2 italic">
+                      "{event.coachingTips[0]}"
+                    </div>
+                  )}
 
                   {event.verified === undefined ? (
                     <div className="flex items-center gap-2">
@@ -651,6 +730,16 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               </div>
             </div>
           </div>
+        )}
+
+        {/* Show AI panel toggle when closed */}
+        {!showAIPanel && aiEvents.length > 0 && (
+          <button
+            onClick={() => setShowAIPanel(true)}
+            className="fixed right-4 bottom-4 bg-purple-600 hover:bg-purple-700 p-3 rounded-full shadow-lg transition"
+          >
+            <Brain className="w-6 h-6" />
+          </button>
         )}
       </div>
     </div>
