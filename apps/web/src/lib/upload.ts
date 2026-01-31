@@ -1,4 +1,7 @@
-// Upload helper for R2 storage - server-side upload to bypass CORS
+// Upload helper for R2 storage via Cloudflare Worker
+
+// Cloudflare Worker URL for uploads (bypasses CORS and size limits)
+const UPLOAD_WORKER_URL = 'https://slatina-upload.michal-baturko.workers.dev';
 
 type UploadFolder = 'videos' | 'photos' | 'audio' | 'screenshots';
 
@@ -25,12 +28,12 @@ export async function uploadFile(
 
   let response;
   try {
-    response = await fetch('/api/upload', {
+    response = await fetch(UPLOAD_WORKER_URL, {
       method: 'POST',
       body: formData,
     });
   } catch (err) {
-    throw new Error('Nepodařilo se připojit k serveru');
+    throw new Error('Nepodařilo se připojit k upload serveru');
   }
 
   if (!response.ok) {
