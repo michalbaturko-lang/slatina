@@ -15,33 +15,44 @@ export async function uploadFile(
   const name = filename || (file instanceof File ? file.name : `file-${Date.now()}`);
 
   // Get presigned URL from our API
-  const response = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: name,
-      contentType: file.type,
-      folder,
-    }),
-  });
+  let response;
+  try {
+    response = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: name,
+        contentType: file.type,
+        folder,
+      }),
+    });
+  } catch (err) {
+    throw new Error('Nepodařilo se připojit k serveru');
+  }
 
   if (!response.ok) {
-    throw new Error('Failed to get upload URL');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to get upload URL');
   }
 
   const { uploadUrl, publicUrl, key } = await response.json();
 
   // Upload directly to R2
-  const uploadResponse = await fetch(uploadUrl, {
-    method: 'PUT',
-    body: file,
-    headers: {
-      'Content-Type': file.type,
-    },
-  });
+  let uploadResponse;
+  try {
+    uploadResponse = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type,
+      },
+    });
+  } catch (err) {
+    throw new Error('Upload selhal - zkontrolujte CORS nastavení R2 bucketu');
+  }
 
   if (!uploadResponse.ok) {
-    throw new Error('Failed to upload file');
+    throw new Error(`Upload selhal: ${uploadResponse.status} ${uploadResponse.statusText}`);
   }
 
   return { publicUrl, key };
