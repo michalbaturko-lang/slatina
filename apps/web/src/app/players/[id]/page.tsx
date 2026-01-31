@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -9,7 +9,8 @@ import {
   MessageSquare,
   Video,
   Calendar,
-  ChevronRight,
+  Camera,
+  User,
 } from 'lucide-react';
 import {
   getPlayerById,
@@ -17,6 +18,7 @@ import {
   getMatchesForPlayer,
   getGoalsForPlayer,
   getCommentsForPlayer,
+  updatePlayer,
   Player,
   PlayerStats,
   Match,
@@ -32,6 +34,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
   const [goals, setGoals] = useState<Goal[]>([]);
   const [comments, setComments] = useState<CoachComment[]>([]);
   const [activeTab, setActiveTab] = useState<'matches' | 'goals' | 'comments'>('matches');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadData = () => {
@@ -46,6 +49,70 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     };
     loadData();
   }, [params.id]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !player) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Prosím vyberte obrázek');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Obrázek je příliš velký (max 5MB)');
+      return;
+    }
+
+    try {
+      // Create a canvas to resize the image
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxSize = 400;
+          let width = img.width;
+          let height = img.height;
+
+          // Resize to fit within maxSize
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+          // Update player with photo
+          const updated = updatePlayer(player.id, { photoUrl: dataUrl });
+          if (updated) {
+            setPlayer(updated);
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Photo upload failed:', err);
+      alert('Nepodařilo se nahrát fotku');
+    }
+  };
 
   if (!player) {
     return (
@@ -89,21 +156,85 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           marginBottom: 24,
           textAlign: 'center',
         }}>
-          <div style={{
-            width: 80,
-            height: 80,
-            borderRadius: '50%',
-            backgroundColor: '#374151',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 32,
-            fontWeight: 700,
-            color: '#60a5fa',
-            margin: '0 auto 16px',
-          }}>
-            {player.number || '?'}
+          {/* Photo with upload */}
+          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
+            {player.photoUrl ? (
+              <img
+                src={player.photoUrl}
+                alt={player.name}
+                style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '4px solid #374151',
+                }}
+              />
+            ) : (
+              <div style={{
+                width: 100,
+                height: 100,
+                borderRadius: '50%',
+                backgroundColor: '#374151',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 40,
+                fontWeight: 700,
+                color: '#60a5fa',
+                border: '4px solid #4b5563',
+              }}>
+                {player.number || <User size={40} />}
+              </div>
+            )}
+
+            {/* Camera button overlay */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                backgroundColor: '#2563eb',
+                border: '3px solid #1f2937',
+                color: 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Camera size={16} />
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              style={{ display: 'none' }}
+            />
           </div>
+
+          {/* Player number badge */}
+          {player.number && (
+            <div style={{
+              display: 'inline-block',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              fontSize: 14,
+              fontWeight: 700,
+              padding: '4px 12px',
+              borderRadius: 20,
+              marginBottom: 8,
+            }}>
+              #{player.number}
+            </div>
+          )}
+
           <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{player.name}</h2>
           <p style={{ color: '#9ca3af' }}>{player.position || 'Hráč'}</p>
 

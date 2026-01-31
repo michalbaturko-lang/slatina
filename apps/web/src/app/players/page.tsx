@@ -150,23 +150,39 @@ export default function PlayersPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: '50%',
-                    backgroundColor: '#374151',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: '#60a5fa',
-                  }}>
-                    {player.number || '?'}
-                  </div>
+                  {player.photoUrl ? (
+                    <img
+                      src={player.photoUrl}
+                      alt={player.name}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '2px solid #374151',
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: '50%',
+                      backgroundColor: '#374151',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: '#60a5fa',
+                    }}>
+                      {player.number || '?'}
+                    </div>
+                  )}
                   <div>
                     <div style={{ fontWeight: 500 }}>{player.name}</div>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>{player.position || 'Hráč'}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                      {player.number && `#${player.number} • `}{player.position || 'Hráč'}
+                    </div>
                   </div>
                 </div>
 
