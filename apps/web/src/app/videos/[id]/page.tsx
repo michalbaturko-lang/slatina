@@ -29,6 +29,8 @@ import {
   Image as ImageIcon,
   Share2,
   Download,
+  Scissors,
+  Flag,
 } from 'lucide-react';
 import {
   getVideo,
@@ -41,6 +43,7 @@ import {
   createComment,
   deleteComment as deleteCommentCloud,
   getPlayers,
+  createPlayerClip,
   Video,
   Screenshot,
   AudioComment,
@@ -73,7 +76,22 @@ interface TimelineMarker {
   label?: string;
 }
 
-const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ffffff'];
+// Colors: white, black, yellow, blue
+const COLORS = ['#ffffff', '#000000', '#eab308', '#3b82f6'];
+
+// Helper to convert spoken punctuation to symbols
+function convertSpokenPunctuation(text: string): string {
+  return text
+    .replace(/\btečka\b/gi, '.')
+    .replace(/\bvykřičník\b/gi, '!')
+    .replace(/\botazník\b/gi, '?')
+    .replace(/\bčárka\b/gi, ',')
+    .replace(/\bdvojte?čka\b/gi, ':')
+    .replace(/\bstředník\b/gi, ';')
+    .replace(/\bpomlčka\b/gi, '-')
+    .replace(/\bnový řádek\b/gi, '\n')
+    .replace(/\bnový odstavec\b/gi, '\n\n');
+}
 const STROKE_WIDTHS = [4, 6, 8, 12];
 
 export default function VideoDetailPage({ params }: { params: { id: string } }) {
@@ -92,7 +110,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [isMuted, setIsMuted] = useState(false);
 
   const [selectedTool, setSelectedTool] = useState<ToolType>('select');
-  const [selectedColor, setSelectedColor] = useState('#ef4444');
+  const [selectedColor, setSelectedColor] = useState('#ffffff');
   const [strokeWidth, setStrokeWidth] = useState(6);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
@@ -123,6 +141,38 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [playerSearch, setPlayerSearch] = useState('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+
+  // Rename video
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [newVideoTitle, setNewVideoTitle] = useState('');
+
+  // Thumbnail selection
+  const [showThumbnailModal, setShowThumbnailModal] = useState(false);
+
+  // Ratings (red=problem, orange=interesting, green=praise)
+  type RatingType = 'problem' | 'interesting' | 'praise';
+  interface Rating {
+    id: string;
+    time: number;
+    type: RatingType;
+    playerId?: string;
+    playerName?: string;
+    note?: string;
+  }
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [pendingRating, setPendingRating] = useState<{ type: RatingType } | null>(null);
+
+  // Share from moment
+  const [shareTime, setShareTime] = useState<number | null>(null);
+
+  // Clip creation
+  const [clipStart, setClipStart] = useState<number | null>(null);
+  const [clipEnd, setClipEnd] = useState<number | null>(null);
+  const [showClipModal, setShowClipModal] = useState(false);
+  const [clipTitle, setClipTitle] = useState('');
+  const [clipCategory, setClipCategory] = useState<'goal' | 'assist' | 'skill' | 'defense' | 'other'>('other');
+  const [clipPlayer, setClipPlayer] = useState<Player | null>(null);
 
   // Responsive
   const [isMobile, setIsMobile] = useState(false);
@@ -343,8 +393,10 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             for (let i = 0; i < event.results.length; i++) {
               fullTranscript += event.results[i][0].transcript + ' ';
             }
-            transcriptRef.current = fullTranscript.trim();
-            setTranscription(fullTranscript.trim());
+            // Convert spoken punctuation to symbols
+            const processed = convertSpokenPunctuation(fullTranscript.trim());
+            transcriptRef.current = processed;
+            setTranscription(processed);
           };
           recognition.onerror = (e: any) => console.log('Speech recognition error:', e.error);
           recognition.start();
@@ -502,6 +554,128 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     setShowPlayerDropdown(false);
   }, [selectedPlayers]);
 
+  // Rename video
+  const handleRenameVideo = useCallback(async () => {
+    if (!video || !newVideoTitle.trim()) return;
+    try {
+      await updateVideo(video.id, { title: newVideoTitle.trim() });
+      setVideo(prev => prev ? { ...prev, title: newVideoTitle.trim() } : null);
+      setShowRenameModal(false);
+    } catch (err) {
+      console.error('Failed to rename video:', err);
+      alert('Nepodařilo se přejmenovat video');
+    }
+  }, [video, newVideoTitle]);
+
+  // Set thumbnail from screenshot
+  const handleSetThumbnail = useCallback(async (screenshot: Screenshot) => {
+    if (!video) return;
+    try {
+      await updateVideo(video.id, { thumbnail_url: screenshot.image_url });
+      setVideo(prev => prev ? { ...prev, thumbnail_url: screenshot.image_url } : null);
+      setShowThumbnailModal(false);
+      alert('Náhled nastaven!');
+    } catch (err) {
+      console.error('Failed to set thumbnail:', err);
+      alert('Nepodařilo se nastavit náhled');
+    }
+  }, [video]);
+
+  // Add rating
+  const handleAddRating = useCallback((type: RatingType, player?: Player) => {
+    const newRating: Rating = {
+      id: `rating-${Date.now()}`,
+      time: currentTime,
+      type,
+      playerId: player?.id,
+      playerName: player?.name,
+    };
+    setRatings(prev => [...prev, newRating]);
+    setShowRatingModal(false);
+    setPendingRating(null);
+  }, [currentTime]);
+
+  // Share from specific moment
+  const shareFromMoment = useCallback(async () => {
+    if (!video) return;
+    const time = shareTime ?? currentTime;
+    const url = `${window.location.origin}/videos/${video.id}?t=${Math.floor(time)}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: video.title,
+          text: `${video.title} - ${formatTime(time)}`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert('Odkaz zkopírován!');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        try {
+          await navigator.clipboard.writeText(url);
+          alert('Odkaz zkopírován!');
+        } catch {
+          console.error('Could not share:', err);
+        }
+      }
+    }
+    setShareTime(null);
+  }, [video, shareTime, currentTime]);
+
+  // Clip creation
+  const handleMarkClipStart = useCallback(() => {
+    setClipStart(currentTime);
+    if (clipEnd !== null && clipEnd < currentTime) {
+      setClipEnd(null);
+    }
+  }, [currentTime, clipEnd]);
+
+  const handleMarkClipEnd = useCallback(() => {
+    if (clipStart !== null && currentTime > clipStart) {
+      setClipEnd(currentTime);
+      setShowClipModal(true);
+    } else {
+      alert('Konec klipu musí být po začátku');
+    }
+  }, [currentTime, clipStart]);
+
+  const handleSaveClip = useCallback(async () => {
+    if (!video || clipStart === null || clipEnd === null || !clipPlayer) {
+      alert('Vyplňte všechny údaje');
+      return;
+    }
+    try {
+      await createPlayerClip({
+        player_id: clipPlayer.id,
+        video_id: video.id,
+        start_time: clipStart,
+        end_time: clipEnd,
+        title: clipTitle || `Klip ${formatTime(clipStart)}-${formatTime(clipEnd)}`,
+        category: clipCategory,
+      });
+      alert('Klip uložen!');
+      setShowClipModal(false);
+      setClipStart(null);
+      setClipEnd(null);
+      setClipTitle('');
+      setClipPlayer(null);
+    } catch (err) {
+      console.error('Failed to save clip:', err);
+      alert('Nepodařilo se uložit klip');
+    }
+  }, [video, clipStart, clipEnd, clipTitle, clipCategory, clipPlayer]);
+
+  const handleCancelClip = useCallback(() => {
+    setClipStart(null);
+    setClipEnd(null);
+    setShowClipModal(false);
+    setClipTitle('');
+    setClipPlayer(null);
+  }, []);
+
   // Filter players based on search
   const filteredPlayers = allPlayers.filter(p =>
     p.name.toLowerCase().includes(playerSearch.toLowerCase()) ||
@@ -587,6 +761,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     ...comments.map(c => ({ id: c.id, time: c.time, type: 'comment' as const, label: c.text.substring(0, 20) })),
     ...screenshots.map(s => ({ id: s.id, time: s.time, type: 'screenshot' as const })),
     ...audioComments.map(a => ({ id: a.id, time: a.time, type: 'audio' as const, label: a.transcript?.substring(0, 20) })),
+    ...ratings.map(r => ({ id: r.id, time: r.time, type: r.type as any, label: r.playerName })),
   ];
 
   if (loading) {
@@ -630,11 +805,58 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             <ArrowLeft size={20} />
           </Link>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{video.title}</h1>
+            <button
+              onClick={() => { setNewVideoTitle(video.title); setShowRenameModal(true); }}
+              style={{
+                fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: 4, padding: 0,
+              }}
+            >
+              {video.title}
+              <Pencil size={12} style={{ color: '#6b7280', flexShrink: 0 }} />
+            </button>
             <p style={{ fontSize: 11, color: '#9ca3af' }}>
               {new Date(video.created_at).toLocaleDateString('cs-CZ')}
             </p>
           </div>
+          <button
+            onClick={() => setShowThumbnailModal(true)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#374151',
+              border: 'none',
+              borderRadius: 8,
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+            }}
+            title="Nastavit náhled"
+          >
+            <ImageIcon size={16} />
+          </button>
+          <button
+            onClick={shareFromMoment}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#374151',
+              border: 'none',
+              borderRadius: 8,
+              color: 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+            }}
+            title="Sdílet od tohoto momentu"
+          >
+            <Share2 size={16} />
+            {formatTime(currentTime)}
+          </button>
           <button
             onClick={shareVideoSummary}
             style={{
@@ -651,7 +873,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             }}
           >
             <Share2 size={16} />
-            Sdílet
+            Shrnutí
           </button>
         </div>
       </header>
@@ -832,6 +1054,104 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               </button>
             )}
           </div>
+
+          {/* Divider on PC */}
+          {!isMobile && <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />}
+
+          {/* Rating buttons */}
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#9ca3af', marginRight: 4 }}>Hodnocení:</span>
+            <button
+              onClick={() => { setPendingRating({ type: 'problem' }); setShowRatingModal(true); }}
+              title="Problém - co zlepšit"
+              style={{
+                width: 32, height: 32, borderRadius: '50%', border: 'none',
+                backgroundColor: '#dc2626', color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+              }}
+            >
+              ⚠️
+            </button>
+            <button
+              onClick={() => { setPendingRating({ type: 'interesting' }); setShowRatingModal(true); }}
+              title="Zajímavé - k diskuzi"
+              style={{
+                width: 32, height: 32, borderRadius: '50%', border: 'none',
+                backgroundColor: '#f97316', color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+              }}
+            >
+              💡
+            </button>
+            <button
+              onClick={() => { setPendingRating({ type: 'praise' }); setShowRatingModal(true); }}
+              title="Pochvala - skvělé!"
+              style={{
+                width: 32, height: 32, borderRadius: '50%', border: 'none',
+                backgroundColor: '#22c55e', color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+              }}
+            >
+              ⭐
+            </button>
+          </div>
+
+          {/* Divider on PC */}
+          {!isMobile && <div style={{ width: 1, height: 32, backgroundColor: '#374151' }} />}
+
+          {/* Clip creation */}
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#9ca3af', marginRight: 4 }}>Klip:</span>
+            {clipStart === null ? (
+              <button
+                onClick={handleMarkClipStart}
+                title="Označit začátek klipu"
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#1f2937',
+                  border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
+                }}
+              >
+                <Flag size={14} />
+                Start
+              </button>
+            ) : (
+              <>
+                <div style={{
+                  padding: '6px 12px', backgroundColor: '#065f46',
+                  borderRadius: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <Flag size={14} />
+                  {formatTime(clipStart)}
+                </div>
+                <button
+                  onClick={handleMarkClipEnd}
+                  title="Označit konec klipu"
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#2563eb',
+                    border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
+                  }}
+                >
+                  <Scissors size={14} />
+                  Konec
+                </button>
+                <button
+                  onClick={handleCancelClip}
+                  title="Zrušit klip"
+                  style={{
+                    padding: 6,
+                    backgroundColor: 'transparent',
+                    border: 'none', borderRadius: 6, color: '#9ca3af', cursor: 'pointer',
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Transcription preview */}
@@ -871,8 +1191,13 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 borderRadius: '50%',
                 border: '2px solid #111827',
                 cursor: 'pointer',
-                backgroundColor: marker.type === 'comment' ? '#22c55e' :
-                               marker.type === 'screenshot' ? '#f97316' : '#a855f7',
+                backgroundColor:
+                  marker.type === 'comment' ? '#22c55e' :
+                  marker.type === 'screenshot' ? '#f97316' :
+                  marker.type === 'audio' ? '#a855f7' :
+                  marker.type === 'problem' ? '#dc2626' :
+                  marker.type === 'interesting' ? '#f97316' :
+                  marker.type === 'praise' ? '#22c55e' : '#6b7280',
               }}
             />
           ))}
@@ -1054,6 +1379,43 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         </div>
       )}
 
+      {/* Ratings Section */}
+      {ratings.length > 0 && (
+        <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937', maxWidth: 900, margin: '0 auto' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            Hodnocení ({ratings.length})
+          </h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {ratings.sort((a, b) => a.time - b.time).map(r => (
+              <button
+                key={r.id}
+                onClick={() => seek(r.time)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                  backgroundColor: '#1f2937', border: 'none', borderRadius: 8,
+                  color: 'white', cursor: 'pointer',
+                  borderLeft: `4px solid ${r.type === 'problem' ? '#dc2626' : r.type === 'interesting' ? '#f97316' : '#22c55e'}`,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>
+                  {r.type === 'problem' ? '⚠️' : r.type === 'interesting' ? '💡' : '⭐'}
+                </span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(r.time)}</div>
+                  {r.playerName && <div style={{ fontSize: 12, fontWeight: 500 }}>{r.playerName}</div>}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRatings(prev => prev.filter(x => x.id !== r.id)); }}
+                  style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 2, marginLeft: 4 }}
+                >
+                  <X size={12} />
+                </button>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Text Comments Section */}
       <div style={{ backgroundColor: '#111827', padding: 12, borderTop: '1px solid #1f2937', maxWidth: 900, margin: '0 auto' }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1129,7 +1491,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 320, maxHeight: '60vh', overflow: 'auto' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Vyber hráče</h3>
-            {allPlayers.filter(p => p.active).map(player => (
+            {allPlayers.map(player => (
               <button
                 key={player.id}
                 onClick={() => addPlayerMarker(player)}
@@ -1157,6 +1519,246 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             >
               Zrušit
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Video Modal */}
+      {showRenameModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 400 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Přejmenovat video</h3>
+            <input
+              type="text"
+              value={newVideoTitle}
+              onChange={(e) => setNewVideoTitle(e.target.value)}
+              placeholder="Název videa"
+              style={{
+                width: '100%', backgroundColor: '#374151', border: 'none',
+                borderRadius: 8, padding: '12px 14px', color: 'white', fontSize: 14, marginBottom: 12,
+              }}
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleRenameVideo()}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setShowRenameModal(false)}
+                style={{
+                  flex: 1, padding: 12, backgroundColor: '#374151',
+                  border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer',
+                }}
+              >
+                Zrušit
+              </button>
+              <button
+                onClick={handleRenameVideo}
+                disabled={!newVideoTitle.trim()}
+                style={{
+                  flex: 1, padding: 12, backgroundColor: '#2563eb',
+                  border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+                  opacity: newVideoTitle.trim() ? 1 : 0.5,
+                }}
+              >
+                Uložit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thumbnail Selection Modal */}
+      {showThumbnailModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 500, maxHeight: '80vh', overflow: 'auto' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Vybrat náhled videa</h3>
+            {screenshots.length === 0 ? (
+              <p style={{ color: '#9ca3af', textAlign: 'center', padding: 24 }}>
+                Nejprve vytvořte screenshot, který chcete použít jako náhled
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
+                {screenshots.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSetThumbnail(s)}
+                    style={{
+                      position: 'relative', border: video?.thumbnail_url === s.image_url ? '3px solid #2563eb' : '3px solid transparent',
+                      borderRadius: 8, overflow: 'hidden', cursor: 'pointer', padding: 0, background: 'none',
+                    }}
+                  >
+                    <img src={s.image_url} alt={`Screenshot ${formatTime(s.time)}`} style={{ width: '100%', display: 'block' }} />
+                    <span style={{
+                      position: 'absolute', bottom: 4, left: 4,
+                      fontSize: 10, backgroundColor: 'rgba(0,0,0,0.8)', padding: '2px 6px', borderRadius: 4,
+                      color: 'white', fontWeight: 500,
+                    }}>{formatTime(s.time)}</span>
+                    {video?.thumbnail_url === s.image_url && (
+                      <span style={{
+                        position: 'absolute', top: 4, right: 4,
+                        fontSize: 10, backgroundColor: '#2563eb', padding: '2px 6px', borderRadius: 4,
+                        color: 'white', fontWeight: 500,
+                      }}>Aktuální</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setShowThumbnailModal(false)}
+              style={{
+                width: '100%', padding: 12, backgroundColor: '#374151',
+                border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', marginTop: 12,
+              }}
+            >
+              Zavřít
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rating Modal - Select Player */}
+      {showRatingModal && pendingRating && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 320, maxHeight: '60vh', overflow: 'auto' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+              {pendingRating.type === 'problem' && '⚠️ Problém'}
+              {pendingRating.type === 'interesting' && '💡 Zajímavé'}
+              {pendingRating.type === 'praise' && '⭐ Pochvala'}
+            </h3>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 12 }}>
+              Čas: {formatTime(currentTime)} - Vyber hráče (volitelné)
+            </p>
+            <button
+              onClick={() => handleAddRating(pendingRating.type)}
+              style={{
+                width: '100%', padding: 12, backgroundColor: '#374151',
+                border: 'none', borderRadius: 8, color: 'white', textAlign: 'left',
+                cursor: 'pointer', marginBottom: 8, fontWeight: 500,
+              }}
+            >
+              Bez hráče (obecné)
+            </button>
+            {allPlayers.map(player => (
+              <button
+                key={player.id}
+                onClick={() => handleAddRating(pendingRating.type, player)}
+                style={{
+                  width: '100%', padding: 12, backgroundColor: '#374151',
+                  border: 'none', borderRadius: 8, color: 'white', textAlign: 'left',
+                  cursor: 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12,
+                }}
+              >
+                <span style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  backgroundColor: pendingRating.type === 'problem' ? '#dc2626' : pendingRating.type === 'interesting' ? '#f97316' : '#22c55e',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+                }}>
+                  {player.number || '?'}
+                </span>
+                <span>{player.name}</span>
+              </button>
+            ))}
+            <button
+              onClick={() => { setShowRatingModal(false); setPendingRating(null); }}
+              style={{
+                width: '100%', padding: 12, backgroundColor: '#374151',
+                border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', marginTop: 8,
+              }}
+            >
+              Zrušit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Clip Creation Modal */}
+      {showClipModal && clipStart !== null && clipEnd !== null && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: 12, padding: 16, width: '90%', maxWidth: 400 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+              ✂️ Uložit klip
+            </h3>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
+              {formatTime(clipStart)} → {formatTime(clipEnd)} ({Math.round(clipEnd - clipStart)}s)
+            </p>
+
+            {/* Clip title */}
+            <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Název klipu</label>
+            <input
+              type="text"
+              value={clipTitle}
+              onChange={(e) => setClipTitle(e.target.value)}
+              placeholder="např. Gól z rohu"
+              style={{
+                width: '100%', backgroundColor: '#374151', border: 'none',
+                borderRadius: 8, padding: '10px 12px', color: 'white', fontSize: 14, marginBottom: 12,
+              }}
+            />
+
+            {/* Category */}
+            <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Kategorie</label>
+            <select
+              value={clipCategory}
+              onChange={(e) => setClipCategory(e.target.value as any)}
+              style={{
+                width: '100%', backgroundColor: '#374151', border: 'none',
+                borderRadius: 8, padding: '10px 12px', color: 'white', fontSize: 14, marginBottom: 12,
+              }}
+            >
+              <option value="goal">⚽ Gól</option>
+              <option value="assist">🎯 Asistence</option>
+              <option value="skill">✨ Akce</option>
+              <option value="defense">🛡️ Obrana</option>
+              <option value="other">📹 Ostatní</option>
+            </select>
+
+            {/* Player selection */}
+            <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Hráč *</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 16 }}>
+              {allPlayers.map(player => (
+                <button
+                  key={player.id}
+                  onClick={() => setClipPlayer(player)}
+                  style={{
+                    padding: 10, backgroundColor: clipPlayer?.id === player.id ? '#2563eb' : '#374151',
+                    border: 'none', borderRadius: 8, color: 'white', textAlign: 'left',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                  }}
+                >
+                  <span style={{
+                    width: 24, height: 24, borderRadius: '50%', backgroundColor: clipPlayer?.id === player.id ? '#ffffff' : '#2563eb',
+                    color: clipPlayer?.id === player.id ? '#2563eb' : 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11,
+                  }}>
+                    {player.number || '?'}
+                  </span>
+                  <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</span>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleCancelClip}
+                style={{
+                  flex: 1, padding: 12, backgroundColor: '#374151',
+                  border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer',
+                }}
+              >
+                Zrušit
+              </button>
+              <button
+                onClick={handleSaveClip}
+                disabled={!clipPlayer}
+                style={{
+                  flex: 1, padding: 12, backgroundColor: clipPlayer ? '#22c55e' : '#374151',
+                  border: 'none', borderRadius: 8, color: 'white', cursor: clipPlayer ? 'pointer' : 'not-allowed',
+                  opacity: clipPlayer ? 1 : 0.5,
+                }}
+              >
+                Uložit klip
+              </button>
+            </div>
           </div>
         </div>
       )}

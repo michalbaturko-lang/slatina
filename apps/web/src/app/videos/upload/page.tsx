@@ -15,7 +15,7 @@ import {
   Plus,
   FileVideo,
 } from 'lucide-react';
-import { createVideo } from '@/lib/cloud-store';
+import { createVideo, createMatch, createComment } from '@/lib/cloud-store';
 import { uploadFile } from '@/lib/upload';
 import { getTeam, COACHES, OPPONENT_TEAMS } from '@/lib/team-store';
 
@@ -46,6 +46,12 @@ export default function UploadPage() {
   const [scoreAway, setScoreAway] = useState<string>('');
   const [matchDate, setMatchDate] = useState(getTodayDate());
   const [videoType, setVideoType] = useState<'match' | 'training'>('match');
+  const [isTournament, setIsTournament] = useState(false);
+  const [tournamentName, setTournamentName] = useState('');
+  const [matchComment, setMatchComment] = useState('');
+
+  // Tournament options
+  const TOURNAMENTS = ['Vinohrady', 'Žabčice', 'Křenovice', 'Tuřany'];
 
   // Team info
   const team = typeof window !== 'undefined' ? getTeam() : null;
@@ -169,6 +175,30 @@ export default function UploadPage() {
     setIsUploading(true);
     setError(null);
 
+    // Create match record first if it's a match
+    let matchId: string | null = null;
+    if (videoType === 'match' && opponent) {
+      try {
+        const matchName = isTournament && tournamentName
+          ? `${tournamentName}: Slatina vs ${opponent}`
+          : `Slatina vs ${opponent}`;
+
+        const match = await createMatch({
+          name: matchName,
+          date: matchDate,
+          type: isTournament ? 'tournament' : 'match',
+          opponent_id: null,
+          goals_for: scoreHome !== '' ? parseInt(scoreHome) : 0,
+          goals_against: scoreAway !== '' ? parseInt(scoreAway) : 0,
+          notes: matchComment || null,
+        });
+        matchId = match.id;
+      } catch (err) {
+        console.error('Failed to create match:', err);
+        // Continue without match
+      }
+    }
+
     // Upload files one by one
     for (let i = 0; i < fileQueue.length; i++) {
       const item = fileQueue[i];
@@ -199,14 +229,38 @@ export default function UploadPage() {
           f.id === item.id ? { ...f, status: 'processing' as const, progress: 100 } : f
         ));
 
+        // Generate title with tournament if applicable
+        let videoTitle = item.title;
+        if (videoType === 'match' && isTournament && tournamentName) {
+          videoTitle = `${tournamentName}: ${item.title}`;
+        } else if (videoType === 'training') {
+          videoTitle = `Trénink ${new Date(matchDate).toLocaleDateString('cs-CZ')}`;
+          if (fileQueue.length > 1) {
+            videoTitle += ` - Video ${i + 1}`;
+          }
+        }
+
         // Create video record in Supabase
-        await createVideo({
-          title: item.title,
+        const video = await createVideo({
+          title: videoTitle,
           file_url: publicUrl,
           thumbnail_url: null,
           duration: item.duration || null,
-          match_id: null,
+          match_id: matchId,
         });
+
+        // Add initial match comment if provided
+        if (matchComment && i === 0) {
+          try {
+            await createComment({
+              video_id: video.id,
+              time: 0,
+              text: `📝 ${matchComment}`,
+            });
+          } catch (err) {
+            console.error('Failed to add initial comment:', err);
+          }
+        }
 
         // Mark as complete
         setFileQueue(prev => prev.map(f =>
@@ -332,6 +386,39 @@ export default function UploadPage() {
 
             {videoType === 'match' && (
               <>
+                {/* Tournament checkbox */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="isTournament"
+                    checked={isTournament}
+                    onChange={(e) => setIsTournament(e.target.checked)}
+                    className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500"
+                    disabled={isUploading}
+                  />
+                  <label htmlFor="isTournament" className="text-sm font-medium">
+                    Je součástí turnaje?
+                  </label>
+                </div>
+
+                {/* Tournament selection */}
+                {isTournament && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Turnaj</label>
+                    <select
+                      value={tournamentName}
+                      onChange={(e) => setTournamentName(e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
+                      disabled={isUploading}
+                    >
+                      <option value="">-- Vyberte turnaj --</option>
+                      {TOURNAMENTS.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">
@@ -364,63 +451,94 @@ export default function UploadPage() {
 
                 {/* Score section */}
                 {opponent && (
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Výsledek zápasu (volitelné)</label>
-                    <div className="flex items-center gap-2" style={{ maxWidth: 280 }}>
-                      <div className="flex-1">
-                        <label className="block text-xs text-gray-400 mb-1 text-center">Slatina</label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={scoreHome}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/[^0-9]/g, '');
-                            if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 99)) {
-                              setScoreHome(val);
-                            }
-                          }}
-                          placeholder="0"
-                          style={{ fontSize: 16 }}
-                          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition"
-                          disabled={isUploading}
-                        />
-                      </div>
-                      <span className="text-xl font-bold text-gray-500 pt-5">:</span>
-                      <div className="flex-1">
-                        <label className="block text-xs text-gray-400 mb-1 text-center truncate">{opponent}</label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={scoreAway}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/[^0-9]/g, '');
-                            if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 99)) {
-                              setScoreAway(val);
-                            }
-                          }}
-                          placeholder="0"
-                          style={{ fontSize: 16 }}
-                          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition"
-                          disabled={isUploading}
-                        />
-                      </div>
-                      {scoreHome !== '' && scoreAway !== '' && (
-                        <div className={`text-2xl pt-5 ${
-                          parseInt(scoreHome) > parseInt(scoreAway) ? 'text-green-400' :
-                          parseInt(scoreHome) < parseInt(scoreAway) ? 'text-red-400' :
-                          'text-yellow-400'
-                        }`}>
-                          {parseInt(scoreHome) > parseInt(scoreAway) ? '🏆' :
-                           parseInt(scoreHome) < parseInt(scoreAway) ? '😔' :
-                           '🤝'}
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Výsledek zápasu (volitelné)</label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <label className="block text-xs text-gray-400 mb-1 text-center">Slatina</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={scoreHome}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, '');
+                                if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 99)) {
+                                  setScoreHome(val);
+                                }
+                              }}
+                              placeholder="0"
+                              style={{ fontSize: 16 }}
+                              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition"
+                              disabled={isUploading}
+                            />
+                          </div>
+                          <span className="text-xl font-bold text-gray-500 pt-5">:</span>
+                          <div className="flex-1">
+                            <label className="block text-xs text-gray-400 mb-1 text-center truncate">{opponent}</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={scoreAway}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, '');
+                                if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 99)) {
+                                  setScoreAway(val);
+                                }
+                              }}
+                              placeholder="0"
+                              style={{ fontSize: 16 }}
+                              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition"
+                              disabled={isUploading}
+                            />
+                          </div>
+                          {scoreHome !== '' && scoreAway !== '' && (
+                            <div className={`text-2xl pt-5 ${
+                              parseInt(scoreHome) > parseInt(scoreAway) ? 'text-green-400' :
+                              parseInt(scoreHome) < parseInt(scoreAway) ? 'text-red-400' :
+                              'text-yellow-400'
+                            }`}>
+                              {parseInt(scoreHome) > parseInt(scoreAway) ? '🏆' :
+                               parseInt(scoreHome) < parseInt(scoreAway) ? '😔' :
+                               '🤝'}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Match comment */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Úvodní komentář k zápasu</label>
+                      <textarea
+                        value={matchComment}
+                        onChange={(e) => setMatchComment(e.target.value)}
+                        placeholder="Např. První zápas po nemoci, hráli jsme bez Kuby..."
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition resize-none"
+                        rows={2}
+                        disabled={isUploading}
+                      />
+                    </div>
+                  </>
                 )}
               </>
+            )}
+
+            {/* Training date */}
+            {videoType === 'training' && (
+              <div>
+                <label className="block text-sm font-medium mb-2">Datum tréninku</label>
+                <input
+                  type="date"
+                  value={matchDate}
+                  onChange={(e) => setMatchDate(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition"
+                  disabled={isUploading}
+                />
+              </div>
             )}
           </div>
         </div>

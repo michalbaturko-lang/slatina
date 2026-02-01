@@ -18,13 +18,19 @@ import {
   Users,
   Trophy,
 } from 'lucide-react';
-import { getVideos, deleteVideo, Video } from '@/lib/cloud-store';
+import { getVideos, deleteVideo, Video, getComments, getAudioComments, Comment, AudioComment } from '@/lib/cloud-store';
+
+interface VideoStats {
+  commentCount: number;
+  audioCount: number;
+}
 
 export default function VideosPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [videoStats, setVideoStats] = useState<Record<string, VideoStats>>({});
 
   useEffect(() => {
     loadVideos();
@@ -34,6 +40,24 @@ export default function VideosPage() {
     try {
       const storedVideos = await getVideos();
       setVideos(storedVideos);
+
+      // Load stats for each video
+      const stats: Record<string, VideoStats> = {};
+      await Promise.all(storedVideos.map(async (video) => {
+        try {
+          const [comments, audioComments] = await Promise.all([
+            getComments(video.id),
+            getAudioComments(video.id),
+          ]);
+          stats[video.id] = {
+            commentCount: comments.length,
+            audioCount: audioComments.length,
+          };
+        } catch (err) {
+          stats[video.id] = { commentCount: 0, audioCount: 0 };
+        }
+      }));
+      setVideoStats(stats);
     } catch (error) {
       console.error('Failed to load videos:', error);
     } finally {
@@ -156,13 +180,13 @@ export default function VideosPage() {
         ) : viewMode === 'grid' ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredVideos.map((video) => (
-              <VideoCard key={video.id} video={video} onDelete={handleDeleteVideo} />
+              <VideoCard key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} />
             ))}
           </div>
         ) : (
           <div className="space-y-2">
             {filteredVideos.map((video) => (
-              <VideoListItem key={video.id} video={video} onDelete={handleDeleteVideo} />
+              <VideoListItem key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} />
             ))}
           </div>
         )}
@@ -171,7 +195,7 @@ export default function VideosPage() {
   );
 }
 
-function VideoCard({ video, onDelete }: { video: Video; onDelete: (id: string) => void }) {
+function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStats; onDelete: (id: string) => void }) {
   const [showMenu, setShowMenu] = useState(false);
 
   const formatDuration = (seconds: number): string => {
@@ -205,6 +229,22 @@ function VideoCard({ video, onDelete }: { video: Video; onDelete: (id: string) =
           {video.duration && (
             <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded text-xs">
               {formatDuration(video.duration)}
+            </div>
+          )}
+
+          {/* Status indicators */}
+          {stats && (stats.commentCount > 0 || stats.audioCount > 0) && (
+            <div className="absolute top-2 left-2 flex gap-1.5">
+              {stats.commentCount > 0 && (
+                <div className="flex items-center gap-1 bg-green-500/90 px-1.5 py-0.5 rounded text-xs font-medium" title={`${stats.commentCount} komentářů`}>
+                  💬 {stats.commentCount}
+                </div>
+              )}
+              {stats.audioCount > 0 && (
+                <div className="flex items-center gap-1 bg-purple-500/90 px-1.5 py-0.5 rounded text-xs font-medium" title={`${stats.audioCount} hlasových komentářů`}>
+                  🎙️ {stats.audioCount}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -261,7 +301,7 @@ function VideoCard({ video, onDelete }: { video: Video; onDelete: (id: string) =
   );
 }
 
-function VideoListItem({ video, onDelete }: { video: Video; onDelete: (id: string) => void }) {
+function VideoListItem({ video, stats, onDelete }: { video: Video; stats?: VideoStats; onDelete: (id: string) => void }) {
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -297,6 +337,17 @@ function VideoListItem({ video, onDelete }: { video: Video; onDelete: (id: strin
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {formatDuration(video.duration)}
+            </span>
+          )}
+          {/* Status indicators */}
+          {stats && stats.commentCount > 0 && (
+            <span className="flex items-center gap-1 text-green-400" title={`${stats.commentCount} komentářů`}>
+              💬 {stats.commentCount}
+            </span>
+          )}
+          {stats && stats.audioCount > 0 && (
+            <span className="flex items-center gap-1 text-purple-400" title={`${stats.audioCount} hlasových komentářů`}>
+              🎙️ {stats.audioCount}
             </span>
           )}
         </div>
