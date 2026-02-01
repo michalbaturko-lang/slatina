@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STAT Logo Návrhy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1e3a8a 0%, #111827 100%);
+      color: white;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #9ca3af;
+      margin-bottom: 50px;
+      font-size: 16px;
+    }
+    .logos {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 30px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .logo-card {
+      background: #1f2937;
+      border-radius: 20px;
+      padding: 30px;
+      text-align: center;
+      flex: 1;
+      min-width: 320px;
+      max-width: 420px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      transition: transform 0.3s;
+    }
+    .logo-card:hover {
+      transform: translateY(-5px);
+    }
+    .logo-card h2 {
+      color: #f3f4f6;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .logo-card .style-tag {
+      display: inline-block;
+      background: #3b82f6;
+      color: white;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      margin-bottom: 20px;
+    }
+    .logo-card .style-tag.green { background: #22c55e; }
+    .logo-card .style-tag.gold { background: #f59e0b; }
+    .logo-container {
+      background: white;
+      border-radius: 16px;
+      padding: 25px;
+      margin-bottom: 20px;
+      min-height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-container.dark {
+      background: #0f172a;
+    }
+    .logo-container svg {
+      max-width: 100%;
+      height: auto;
+      max-height: 200px;
+    }
+    .logo-card p {
+      color: #9ca3af;
+      font-size: 14px;
+      line-height: 1.7;
+      margin-bottom: 15px;
+    }
+    .use-cases {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .use-case {
+      background: #374151;
+      color: #d1d5db;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 60px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    footer a { color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <h1>🎨 STAT - Návrhy loga</h1>
+  <p class="subtitle">Slatina Trainers' Analytics Tool</p>
+
+  <div class="logos">
+
+    <!-- Logo 1 - Modern -->
+    <div class="logo-card">
+      <h2>Návrh 1</h2>
+      <span class="style-tag">Moderní</span>
+      <div class="logo-container">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+          <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#3b82f6"/>
+              <stop offset="100%" style="stop-color:#1d4ed8"/>
+            </linearGradient>
+          </defs>
+          <rect x="10" y="15" width="380" height="90" rx="45" fill="url(#grad1)"/>
+          <text x="95" y="82" font-family="Arial Black, Arial, sans-serif" font-size="56" font-weight="900" fill="white" letter-spacing="8">STAT</text>
+          <circle cx="55" cy="60" r="28" fill="white"/>
+          <path d="M55 32 L55 88 M27 60 L83 60 M33 40 L77 80 M33 80 L77 40" stroke="#3b82f6" stroke-width="2.5" fill="none"/>
+          <circle cx="55" cy="60" r="10" fill="#3b82f6"/>
+          <text x="200" y="108" font-family="Arial, sans-serif" font-size="10" fill="#64748b" text-anchor="middle" letter-spacing="3">SLATINA TRAINERS' ANALYTICS TOOL</text>
+        </svg>
+      </div>
+      <p>
+        <strong>Čistý a profesionální</strong><br>
+        Zaoblený tvar s fotbalovým míčem. Modrá barva evokuje důvěru a technologii.
+      </p>
+      <div class="use-cases">
+        <span class="use-case">🌐 Hlavička webu</span>
+        <span class="use-case">📱 Favicon</span>
+        <span class="use-case">📧 Email</span>
+      </div>
+    </div>
+
+    <!-- Logo 2 - Dynamic -->
+    <div class="logo-card">
+      <h2>Návrh 2</h2>
+      <span class="style-tag green">Dynamický</span>
+      <div class="logo-container">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 140">
+          <defs>
+            <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#22c55e"/>
+              <stop offset="100%" style="stop-color:#16a34a"/>
+            </linearGradient>
+          </defs>
+          <path d="M20 50 L60 50" stroke="#22c55e" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
+          <path d="M10 65 L50 65" stroke="#22c55e" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+          <path d="M25 80 L55 80" stroke="#22c55e" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
+          <text x="70" y="95" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="900" fill="#1f2937" letter-spacing="2" transform="skewX(-5)">
+            <tspan fill="url(#greenGrad)">S</tspan><tspan fill="#1f2937">TAT</tspan>
+          </text>
+          <ellipse cx="340" cy="55" rx="35" ry="30" fill="#22c55e" opacity="0.2"/>
+          <ellipse cx="350" cy="55" rx="30" ry="25" fill="#22c55e" opacity="0.4"/>
+          <circle cx="360" cy="55" r="22" fill="url(#greenGrad)"/>
+          <path d="M360 33 L360 77 M338 55 L382 55" stroke="white" stroke-width="2" fill="none" opacity="0.6"/>
+          <polygon points="360,43 367,55 360,67 353,55" fill="white"/>
+          <text x="200" y="125" font-family="Arial, sans-serif" font-size="12" fill="#6b7280" text-anchor="middle" letter-spacing="4" font-weight="500">VIDEO ANALYSIS FOR COACHES</text>
+        </svg>
+      </div>
+      <p>
+        <strong>Energický a sportovní</strong><br>
+        Zelená barva fotbalového hřiště. Efekt pohybu evokuje rychlost a akci.
+      </p>
+      <div class="use-cases">
+        <span class="use-case">👕 Trička</span>
+        <span class="use-case">📢 Marketing</span>
+        <span class="use-case">🎬 Video intro</span>
+      </div>
+    </div>
+
+    <!-- Logo 3 - Shield -->
+    <div class="logo-card">
+      <h2>Návrh 3</h2>
+      <span class="style-tag gold">Klubový erb</span>
+      <div class="logo-container dark">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240">
+          <defs>
+            <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#1e40af"/>
+              <stop offset="100%" style="stop-color:#1e3a8a"/>
+            </linearGradient>
+            <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#fbbf24"/>
+              <stop offset="100%" style="stop-color:#f59e0b"/>
+            </linearGradient>
+          </defs>
+          <path d="M100 10 L180 40 L180 120 Q180 180 100 220 Q20 180 20 120 L20 40 Z" fill="url(#shieldGrad)" stroke="#fbbf24" stroke-width="4"/>
+          <path d="M100 25 L165 50 L165 115 Q165 165 100 200 Q35 165 35 115 L35 50 Z" fill="none" stroke="#fbbf24" stroke-width="2" opacity="0.5"/>
+          <ellipse cx="100" cy="100" rx="50" ry="35" fill="none" stroke="white" stroke-width="1.5" opacity="0.3"/>
+          <line x1="100" y1="65" x2="100" y2="135" stroke="white" stroke-width="1.5" opacity="0.3"/>
+          <text x="100" y="85" font-family="Arial Black, Arial, sans-serif" font-size="48" font-weight="900" fill="white" text-anchor="middle">STAT</text>
+          <polygon points="60,145 63,155 55,149 65,149 57,155" fill="url(#goldGrad)"/>
+          <polygon points="100,140 104,152 94,145 106,145 96,152" fill="url(#goldGrad)"/>
+          <polygon points="140,145 143,155 135,149 145,149 137,155" fill="url(#goldGrad)"/>
+          <text x="100" y="175" font-family="Arial, sans-serif" font-size="14" fill="white" text-anchor="middle" font-weight="600">SK SLATINA</text>
+          <text x="100" y="192" font-family="Arial, sans-serif" font-size="11" fill="#fbbf24" text-anchor="middle" letter-spacing="1">2017</text>
+        </svg>
+      </div>
+      <p>
+        <strong>Tradiční a prestižní</strong><br>
+        Klubový štít s hvězdami. Propojuje STAT s identitou SK Slatina 2017.
+      </p>
+      <div class="use-cases">
+        <span class="use-case">⚽ Dresy</span>
+        <span class="use-case">📄 Dokumenty</span>
+        <span class="use-case">🏆 Certifikáty</span>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>STAT - Slatina Trainers' Analytics Tool</p>
+    <p style="margin-top: 8px;">Vytvořeno pro SK Slatina 2017 | <a href="https://skslatina.fun">skslatina.fun</a></p>
+  </footer>
+
+</body>
+</html>
