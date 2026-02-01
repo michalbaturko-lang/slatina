@@ -16,19 +16,25 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
+  UserPlus,
+  X,
+  Check,
 } from 'lucide-react';
 import { getMatches, getVideos, Match, Video } from '@/lib/cloud-store';
-import { OPPONENT_TEAMS } from '@/lib/team-store';
+import { OPPONENT_TEAMS, getPlayers, Player, getMatchById as getLocalMatch, updateMatch as updateLocalMatch, Match as LocalMatch } from '@/lib/team-store';
 
 type ResultFilter = 'all' | 'win' | 'loss' | 'draw';
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [matchPlayers, setMatchPlayers] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [filterResult, setFilterResult] = useState<ResultFilter>('all');
   const [filterOpponent, setFilterOpponent] = useState<string>('all');
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
+  const [showPlayerSelector, setShowPlayerSelector] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -39,6 +45,16 @@ export default function MatchesPage() {
         ]);
         setMatches(matchesData);
         setVideos(videosData);
+
+        // Load players from team-store
+        const playersData = getPlayers();
+        setPlayers(playersData.filter(p => p.active));
+
+        // Load match-player associations from localStorage
+        const storedMatchPlayers = localStorage.getItem('slatina-match-players-map');
+        if (storedMatchPlayers) {
+          setMatchPlayers(JSON.parse(storedMatchPlayers));
+        }
       } catch (err) {
         console.error('Failed to load data:', err);
       } finally {
@@ -47,6 +63,25 @@ export default function MatchesPage() {
     };
     loadData();
   }, []);
+
+  // Toggle player for a match
+  const togglePlayerForMatch = (matchId: string, playerId: string) => {
+    setMatchPlayers(prev => {
+      const current = prev[matchId] || [];
+      const updated = current.includes(playerId)
+        ? current.filter(id => id !== playerId)
+        : [...current, playerId];
+      const newState = { ...prev, [matchId]: updated };
+      localStorage.setItem('slatina-match-players-map', JSON.stringify(newState));
+      return newState;
+    });
+  };
+
+  // Get players for a specific match
+  const getMatchPlayers = (matchId: string) => {
+    const playerIds = matchPlayers[matchId] || [];
+    return players.filter(p => playerIds.includes(p.id));
+  };
 
   // Get videos for a specific match
   const getMatchVideos = (matchId: string) => {
@@ -387,6 +422,20 @@ export default function MatchesPage() {
                             {matchVideos.length} videí
                           </span>
                         )}
+                        {getMatchPlayers(match.id).length > 0 && (
+                          <span style={{
+                            fontSize: 10,
+                            padding: '2px 6px',
+                            backgroundColor: '#22c55e',
+                            borderRadius: 4,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}>
+                            <Users size={10} />
+                            {getMatchPlayers(match.id).length} hráčů
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 16 }}>
                         {match.name}
@@ -424,13 +473,142 @@ export default function MatchesPage() {
                     </div>
                   </button>
 
-                  {/* Expanded content - videos */}
+                  {/* Expanded content - players and videos */}
                   {isExpanded && (
                     <div style={{
                       borderTop: '1px solid #374151',
                       padding: 16,
                       backgroundColor: '#111827',
                     }}>
+                      {/* Players Section */}
+                      <div style={{ marginBottom: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <h4 style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Users size={14} />
+                            Hráči v zápase ({getMatchPlayers(match.id).length})
+                          </h4>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowPlayerSelector(showPlayerSelector === match.id ? null : match.id); }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '4px 8px',
+                              backgroundColor: '#2563eb',
+                              border: 'none',
+                              borderRadius: 6,
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontSize: 11,
+                            }}
+                          >
+                            <UserPlus size={12} />
+                            Upravit
+                          </button>
+                        </div>
+
+                        {/* Player chips */}
+                        {getMatchPlayers(match.id).length > 0 ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {getMatchPlayers(match.id).map(player => (
+                              <span
+                                key={player.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  padding: '4px 10px',
+                                  backgroundColor: '#1f2937',
+                                  borderRadius: 16,
+                                  fontSize: 12,
+                                }}
+                              >
+                                <span style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: '50%',
+                                  backgroundColor: '#3b82f6',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                }}>
+                                  {player.number || '?'}
+                                </span>
+                                {player.name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ color: '#6b7280', fontSize: 12, fontStyle: 'italic' }}>
+                            Zatím nejsou přiřazeni hráči
+                          </p>
+                        )}
+
+                        {/* Player selector modal */}
+                        {showPlayerSelector === match.id && (
+                          <div style={{
+                            marginTop: 12,
+                            padding: 12,
+                            backgroundColor: '#1f2937',
+                            borderRadius: 8,
+                            border: '1px solid #374151',
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                              <span style={{ fontSize: 12, fontWeight: 500 }}>Vyber hráče:</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShowPlayerSelector(null); }}
+                                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 4 }}
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                              {players.map(player => {
+                                const isSelected = (matchPlayers[match.id] || []).includes(player.id);
+                                return (
+                                  <button
+                                    key={player.id}
+                                    onClick={(e) => { e.stopPropagation(); togglePlayerForMatch(match.id, player.id); }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '8px 10px',
+                                      backgroundColor: isSelected ? 'rgba(34, 197, 94, 0.2)' : '#374151',
+                                      border: isSelected ? '1px solid #22c55e' : '1px solid transparent',
+                                      borderRadius: 8,
+                                      color: 'white',
+                                      cursor: 'pointer',
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <span style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: '50%',
+                                      backgroundColor: isSelected ? '#22c55e' : '#4b5563',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                    }}>
+                                      {isSelected ? <Check size={12} /> : player.number || '?'}
+                                    </span>
+                                    <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {player.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Videos Section */}
                       {matchVideos.length > 0 ? (
                         <div>
                           <h4 style={{ fontSize: 12, color: '#9ca3af', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>

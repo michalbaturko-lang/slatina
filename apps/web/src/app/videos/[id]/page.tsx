@@ -42,14 +42,13 @@ import {
   getComments,
   createComment,
   deleteComment as deleteCommentCloud,
-  getPlayers,
   createPlayerClip,
   Video,
   Screenshot,
   AudioComment,
   Comment,
-  Player,
 } from '@/lib/cloud-store';
+import { getPlayers, Player, addPlayerClip as addPlayerClipLocal } from '@/lib/team-store';
 import { uploadFile, uploadDataUrl } from '@/lib/upload';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'playerMarker';
@@ -236,17 +235,19 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         setVideo(videoData);
 
         // Load related data
-        const [screenshotsData, audioData, commentsData, playersData] = await Promise.all([
+        const [screenshotsData, audioData, commentsData] = await Promise.all([
           getScreenshots(params.id),
           getAudioComments(params.id),
           getComments(params.id),
-          getPlayers(),
         ]);
+
+        // Get players from team-store (localStorage with defaults)
+        const playersData = getPlayers();
 
         setScreenshots(screenshotsData);
         setAudioComments(audioData);
         setComments(commentsData);
-        setAllPlayers(playersData);
+        setAllPlayers(playersData.filter(p => p.active));
         setLoading(false);
       } catch (err) {
         console.error('Error loading video:', err);
@@ -648,11 +649,12 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       return;
     }
     try {
-      await createPlayerClip({
-        player_id: clipPlayer.id,
-        video_id: video.id,
-        start_time: clipStart,
-        end_time: clipEnd,
+      // Save to local team-store
+      addPlayerClipLocal({
+        playerId: clipPlayer.id,
+        videoId: video.id,
+        startTime: clipStart,
+        endTime: clipEnd,
         title: clipTitle || `Klip ${formatTime(clipStart)}-${formatTime(clipEnd)}`,
         category: clipCategory,
       });
