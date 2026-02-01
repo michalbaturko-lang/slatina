@@ -1,14 +1,37 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
   Video, Pencil, Upload, Users, ChevronRight, Mic, Camera,
   Share2, MessageSquare, Trophy, Clock, Palette, UserCircle,
-  Play, Target, FileText, Download, Smartphone
+  Play, Target, FileText, Download, Smartphone, Calendar
 } from 'lucide-react';
+import { getVideos, getMatches, Video as VideoType, Match } from '@/lib/cloud-store';
 
 export default function Home() {
+  const [recentVideos, setRecentVideos] = useState<VideoType[]>([]);
+  const [recentMatches, setRecentMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [videos, matches] = await Promise.all([
+          getVideos(),
+          getMatches(),
+        ]);
+        setRecentVideos(videos.slice(0, 5));
+        setRecentMatches(matches.slice(0, 3));
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header Navigation */}
@@ -78,6 +101,88 @@ export default function Home() {
               Nahrát video
             </Link>
           </div>
+
+          {/* Recent activity section */}
+          {!loading && (recentVideos.length > 0 || recentMatches.length > 0) && (
+            <div className="mt-16 text-left max-w-2xl mx-auto">
+              {/* Recent Matches */}
+              {recentMatches.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
+                    Poslední zápasy
+                  </h3>
+                  <div className="space-y-2">
+                    {recentMatches.map(match => (
+                      <Link
+                        key={match.id}
+                        href={`/matches`}
+                        className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-2 rounded-full ${
+                            match.goals_for > match.goals_against ? 'bg-green-500' :
+                            match.goals_for < match.goals_against ? 'bg-red-500' : 'bg-yellow-500'
+                          }`} />
+                          <span className="font-medium">{match.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`font-bold ${
+                            match.goals_for > match.goals_against ? 'text-green-500' :
+                            match.goals_for < match.goals_against ? 'text-red-500' : 'text-yellow-500'
+                          }`}>
+                            {match.goals_for}:{match.goals_against}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(match.date).toLocaleDateString('cs-CZ')}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Videos */}
+              {recentVideos.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+                    <Video className="w-4 h-4" />
+                    Nejnovější videa ({recentVideos.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {recentVideos.slice(0, 3).map(video => (
+                      <Link
+                        key={video.id}
+                        href={`/videos/${video.id}`}
+                        className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition group"
+                      >
+                        {video.thumbnail_url ? (
+                          <img src={video.thumbnail_url} alt="" className="w-16 h-10 rounded object-cover" />
+                        ) : (
+                          <div className="w-16 h-10 rounded bg-gray-700 flex items-center justify-center">
+                            <Play className="w-4 h-4 text-gray-500" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate group-hover:text-blue-400 transition">{video.title}</p>
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(video.created_at).toLocaleDateString('cs-CZ')}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  {recentVideos.length > 3 && (
+                    <Link href="/videos" className="block text-center text-sm text-blue-400 hover:text-blue-300 mt-3">
+                      Zobrazit všech {recentVideos.length} videí →
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

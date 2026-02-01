@@ -77,6 +77,17 @@ export interface Goal {
   created_at: string;
 }
 
+export interface MatchPlayer {
+  id: string;
+  match_id: string;
+  player_id: string;
+  played: boolean;
+  minutes_played: number | null;
+  goals: number;
+  assists: number;
+  created_at: string;
+}
+
 export interface PlayerPhoto {
   id: string;
   player_id: string;
@@ -584,6 +595,83 @@ export async function createGoal(goal: Omit<Goal, 'id' | 'created_at'>): Promise
   const { data, error } = await supabase
     .from('goals')
     .insert(goal as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
+// MATCH PLAYERS (Lineup/Roster)
+// ============================================
+
+export async function getMatchPlayers(matchId: string): Promise<MatchPlayer[]> {
+  if (!isProductionMode()) {
+    const data = localStorage.getItem('slatina-match-players');
+    const players = data ? JSON.parse(data) : [];
+    return players.filter((p: MatchPlayer) => p.match_id === matchId);
+  }
+
+  const { data, error } = await supabase
+    .from('match_players')
+    .select('*')
+    .eq('match_id', matchId);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addPlayerToMatch(matchPlayer: Omit<MatchPlayer, 'id' | 'created_at'>): Promise<MatchPlayer> {
+  if (!isProductionMode()) {
+    const players = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
+    const newPlayer = { ...matchPlayer, id: `mp-${Date.now()}`, created_at: new Date().toISOString() };
+    players.push(newPlayer);
+    localStorage.setItem('slatina-match-players', JSON.stringify(players));
+    return newPlayer as MatchPlayer;
+  }
+
+  const { data, error } = await supabase
+    .from('match_players')
+    .insert(matchPlayer as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function removePlayerFromMatch(matchId: string, playerId: string): Promise<void> {
+  if (!isProductionMode()) {
+    const players = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
+    const filtered = players.filter((p: MatchPlayer) => !(p.match_id === matchId && p.player_id === playerId));
+    localStorage.setItem('slatina-match-players', JSON.stringify(filtered));
+    return;
+  }
+
+  const { error } = await supabase
+    .from('match_players')
+    .delete()
+    .eq('match_id', matchId)
+    .eq('player_id', playerId);
+
+  if (error) throw error;
+}
+
+export async function updateMatchPlayer(id: string, updates: Partial<MatchPlayer>): Promise<MatchPlayer | null> {
+  if (!isProductionMode()) {
+    const players = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
+    const index = players.findIndex((p: MatchPlayer) => p.id === id);
+    if (index === -1) return null;
+    players[index] = { ...players[index], ...updates };
+    localStorage.setItem('slatina-match-players', JSON.stringify(players));
+    return players[index];
+  }
+
+  const { data, error } = await supabase
+    .from('match_players')
+    .update(updates as any)
+    .eq('id', id)
     .select()
     .single();
 

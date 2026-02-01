@@ -18,7 +18,7 @@ import {
   Users,
   Trophy,
 } from 'lucide-react';
-import { getVideos, deleteVideo, Video, getComments, getAudioComments, Comment, AudioComment } from '@/lib/cloud-store';
+import { getVideos, deleteVideo, Video, getComments, getAudioComments, getMatches, Match, Comment, AudioComment } from '@/lib/cloud-store';
 
 interface VideoStats {
   commentCount: number;
@@ -27,9 +27,11 @@ interface VideoStats {
 
 export default function VideosPage() {
   const [videos, setVideos] = useState<Video[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterMatch, setFilterMatch] = useState<string>('all');
   const [videoStats, setVideoStats] = useState<Record<string, VideoStats>>({});
 
   useEffect(() => {
@@ -38,8 +40,12 @@ export default function VideosPage() {
 
   const loadVideos = async () => {
     try {
-      const storedVideos = await getVideos();
+      const [storedVideos, storedMatches] = await Promise.all([
+        getVideos(),
+        getMatches(),
+      ]);
       setVideos(storedVideos);
+      setMatches(storedMatches);
 
       // Load stats for each video
       const stats: Record<string, VideoStats> = {};
@@ -65,6 +71,13 @@ export default function VideosPage() {
     }
   };
 
+  // Get match name for a video
+  const getMatchName = (matchId: string | null) => {
+    if (!matchId) return null;
+    const match = matches.find(m => m.id === matchId);
+    return match?.name || null;
+  };
+
   const handleDeleteVideo = async (id: string) => {
     if (confirm('Opravdu chcete smazat toto video?')) {
       try {
@@ -78,7 +91,10 @@ export default function VideosPage() {
 
   const filteredVideos = videos.filter(video => {
     const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
+    const matchesMatchFilter = filterMatch === 'all' ||
+      (filterMatch === 'no-match' && !video.match_id) ||
+      video.match_id === filterMatch;
+    return matchesSearch && matchesMatchFilter;
   });
 
   if (loading) {
@@ -144,6 +160,21 @@ export default function VideosPage() {
               className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-blue-500 transition"
             />
           </div>
+
+          {/* Match filter */}
+          <select
+            value={filterMatch}
+            onChange={(e) => setFilterMatch(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition min-w-[180px]"
+          >
+            <option value="all">Všechny zápasy</option>
+            <option value="no-match">Bez zápasu</option>
+            {matches.map(match => (
+              <option key={match.id} value={match.id}>
+                {match.name} ({match.goals_for}:{match.goals_against})
+              </option>
+            ))}
+          </select>
 
           {/* View mode */}
           <div className="flex items-center bg-gray-800 rounded-lg p-1">

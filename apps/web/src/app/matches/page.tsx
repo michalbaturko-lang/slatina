@@ -8,53 +8,91 @@ import {
   Trophy,
   Calendar,
   Play,
-  Filter,
   TrendingUp,
   TrendingDown,
   Minus,
+  Video as VideoIcon,
+  Users,
+  Plus,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { getVideos, DemoVideo } from '@/lib/demo-store';
+import { getMatches, getVideos, Match, Video } from '@/lib/cloud-store';
 import { OPPONENT_TEAMS } from '@/lib/team-store';
 
 type ResultFilter = 'all' | 'win' | 'loss' | 'draw';
 
 export default function MatchesPage() {
-  const [videos, setVideos] = useState<DemoVideo[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterResult, setFilterResult] = useState<ResultFilter>('all');
   const [filterOpponent, setFilterOpponent] = useState<string>('all');
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
 
   useEffect(() => {
-    const allVideos = getVideos();
-    // Filter videos that have scores
-    const matches = allVideos.filter(v => v.scoreHome !== undefined && v.scoreAway !== undefined);
-    setVideos(matches);
+    const loadData = async () => {
+      try {
+        const [matchesData, videosData] = await Promise.all([
+          getMatches(),
+          getVideos(),
+        ]);
+        setMatches(matchesData);
+        setVideos(videosData);
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
+  // Get videos for a specific match
+  const getMatchVideos = (matchId: string) => {
+    return videos.filter(v => v.match_id === matchId);
+  };
+
+  // Get videos without a match (orphaned)
+  const orphanedVideos = useMemo(() => {
+    return videos.filter(v => !v.match_id);
+  }, [videos]);
+
   const filteredMatches = useMemo(() => {
-    return videos.filter(video => {
-      const isWin = video.scoreHome! > video.scoreAway!;
-      const isLoss = video.scoreHome! < video.scoreAway!;
-      const isDraw = video.scoreHome === video.scoreAway;
+    return matches.filter(match => {
+      const isWin = match.goals_for > match.goals_against;
+      const isLoss = match.goals_for < match.goals_against;
+      const isDraw = match.goals_for === match.goals_against;
 
       const matchesResult = filterResult === 'all' ||
         (filterResult === 'win' && isWin) ||
         (filterResult === 'loss' && isLoss) ||
         (filterResult === 'draw' && isDraw);
 
-      const matchesOpponent = filterOpponent === 'all' || video.opponent === filterOpponent;
+      // Check if match name contains opponent
+      const matchesOpponent = filterOpponent === 'all' ||
+        match.name.toLowerCase().includes(filterOpponent.toLowerCase());
 
       return matchesResult && matchesOpponent;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [videos, filterResult, filterOpponent]);
+  }, [matches, filterResult, filterOpponent]);
 
   const stats = useMemo(() => {
-    const wins = videos.filter(v => v.scoreHome! > v.scoreAway!).length;
-    const losses = videos.filter(v => v.scoreHome! < v.scoreAway!).length;
-    const draws = videos.filter(v => v.scoreHome === v.scoreAway).length;
-    const goalsFor = videos.reduce((sum, v) => sum + (v.scoreHome || 0), 0);
-    const goalsAgainst = videos.reduce((sum, v) => sum + (v.scoreAway || 0), 0);
-    return { wins, losses, draws, goalsFor, goalsAgainst, total: videos.length };
-  }, [videos]);
+    const wins = matches.filter(m => m.goals_for > m.goals_against).length;
+    const losses = matches.filter(m => m.goals_for < m.goals_against).length;
+    const draws = matches.filter(m => m.goals_for === m.goals_against).length;
+    const goalsFor = matches.reduce((sum, m) => sum + m.goals_for, 0);
+    const goalsAgainst = matches.reduce((sum, m) => sum + m.goals_against, 0);
+    return { wins, losses, draws, goalsFor, goalsAgainst, total: matches.length };
+  }, [matches]);
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#030712', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#030712', color: 'white' }}>
@@ -67,9 +105,9 @@ export default function MatchesPage() {
         top: 0,
         zIndex: 50,
       }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Link href="/videos" style={{ padding: 8, color: 'white' }}>
+            <Link href="/" style={{ padding: 8, color: 'white' }}>
               <ArrowLeft size={20} />
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -86,10 +124,27 @@ export default function MatchesPage() {
               </div>
             </div>
           </div>
+          <Link
+            href="/videos/upload"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              backgroundColor: '#2563eb',
+              borderRadius: 8,
+              color: 'white',
+              textDecoration: 'none',
+              fontSize: 14,
+            }}
+          >
+            <Plus size={16} />
+            Přidat zápas
+          </Link>
         </div>
       </header>
 
-      <main style={{ maxWidth: 800, margin: '0 auto', padding: 16 }}>
+      <main style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
         {/* Stats Summary */}
         <div style={{
           display: 'grid',
@@ -242,93 +297,282 @@ export default function MatchesPage() {
         </div>
 
         {/* Matches List */}
-        {filteredMatches.length === 0 ? (
+        {filteredMatches.length === 0 && orphanedVideos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 48, color: '#6b7280' }}>
             <Trophy size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
             <p>Žádné zápasy k zobrazení</p>
             <p style={{ fontSize: 12, marginTop: 8 }}>
-              {videos.length === 0
-                ? 'Nahrajte videa se skóre pro zobrazení historie zápasů'
-                : 'Změňte filtry pro zobrazení zápasů'}
+              Nahrajte videa se zápasovými informacemi
             </p>
+            <Link
+              href="/videos/upload"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 16,
+                padding: '12px 24px',
+                backgroundColor: '#2563eb',
+                borderRadius: 8,
+                color: 'white',
+                textDecoration: 'none',
+              }}
+            >
+              <Plus size={16} />
+              Nahrát video
+            </Link>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {filteredMatches.map(match => {
-              const isWin = match.scoreHome! > match.scoreAway!;
-              const isLoss = match.scoreHome! < match.scoreAway!;
-              const thumbnail = match.thumbnail || (match.screenshots && match.screenshots.length > 0 ? match.screenshots[0].dataUrl : null);
+              const isWin = match.goals_for > match.goals_against;
+              const isLoss = match.goals_for < match.goals_against;
+              const matchVideos = getMatchVideos(match.id);
+              const isExpanded = expandedMatch === match.id;
 
               return (
-                <Link
+                <div
                   key={match.id}
-                  href={`/videos/${match.id}`}
                   style={{
                     backgroundColor: '#1f2937',
                     borderRadius: 12,
-                    padding: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    textDecoration: 'none',
-                    color: 'white',
+                    overflow: 'hidden',
                     borderLeft: `4px solid ${isWin ? '#22c55e' : isLoss ? '#ef4444' : '#eab308'}`,
                   }}
                 >
-                  {/* Thumbnail */}
-                  <div style={{
-                    width: 80,
-                    height: 50,
-                    backgroundColor: '#374151',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    position: 'relative',
-                    flexShrink: 0,
-                  }}>
-                    {thumbnail ? (
-                      <img src={thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Play size={20} style={{ opacity: 0.5 }} />
+                  {/* Match header */}
+                  <button
+                    onClick={() => setExpandedMatch(isExpanded ? null : match.id)}
+                    style={{
+                      width: '100%',
+                      padding: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      background: 'none',
+                      border: 'none',
+                      color: 'white',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {/* Match info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Calendar size={12} />
+                          {new Date(match.date).toLocaleDateString('cs-CZ')}
+                        </span>
+                        {match.type === 'tournament' && (
+                          <span style={{
+                            fontSize: 10,
+                            padding: '2px 6px',
+                            backgroundColor: '#6366f1',
+                            borderRadius: 4,
+                          }}>
+                            TURNAJ
+                          </span>
+                        )}
+                        {matchVideos.length > 0 && (
+                          <span style={{
+                            fontSize: 10,
+                            padding: '2px 6px',
+                            backgroundColor: '#2563eb',
+                            borderRadius: 4,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}>
+                            <VideoIcon size={10} />
+                            {matchVideos.length} videí
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Match info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Calendar size={12} />
-                        {new Date(match.date).toLocaleDateString('cs-CZ')}
-                      </span>
+                      <div style={{ fontWeight: 500, fontSize: 16 }}>
+                        {match.name}
+                      </div>
+                      {match.notes && (
+                        <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+                          {match.notes}
+                        </p>
+                      )}
                     </div>
-                    <div style={{ fontWeight: 500 }}>
-                      SK Slatina vs. {match.opponent || 'Neznámý'}
-                    </div>
-                  </div>
 
-                  {/* Score */}
-                  <div style={{
-                    backgroundColor: isWin ? 'rgba(34, 197, 94, 0.2)' : isLoss ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.2)',
-                    padding: '8px 16px',
-                    borderRadius: 8,
-                    textAlign: 'center',
-                    flexShrink: 0,
-                  }}>
+                    {/* Score */}
                     <div style={{
-                      fontSize: 24,
-                      fontWeight: 700,
-                      color: isWin ? '#22c55e' : isLoss ? '#ef4444' : '#eab308',
+                      backgroundColor: isWin ? 'rgba(34, 197, 94, 0.2)' : isLoss ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      textAlign: 'center',
+                      flexShrink: 0,
                     }}>
-                      {match.scoreHome}:{match.scoreAway}
+                      <div style={{
+                        fontSize: 24,
+                        fontWeight: 700,
+                        color: isWin ? '#22c55e' : isLoss ? '#ef4444' : '#eab308',
+                      }}>
+                        {match.goals_for}:{match.goals_against}
+                      </div>
+                      <div style={{ fontSize: 10, color: isWin ? '#22c55e' : isLoss ? '#ef4444' : '#eab308' }}>
+                        {isWin ? 'VÝHRA' : isLoss ? 'PROHRA' : 'REMÍZA'}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 10, color: isWin ? '#22c55e' : isLoss ? '#ef4444' : '#eab308' }}>
-                      {isWin ? 'VÝHRA' : isLoss ? 'PROHRA' : 'REMÍZA'}
+
+                    {/* Expand icon */}
+                    <div style={{ color: '#6b7280' }}>
+                      {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     </div>
-                  </div>
-                </Link>
+                  </button>
+
+                  {/* Expanded content - videos */}
+                  {isExpanded && (
+                    <div style={{
+                      borderTop: '1px solid #374151',
+                      padding: 16,
+                      backgroundColor: '#111827',
+                    }}>
+                      {matchVideos.length > 0 ? (
+                        <div>
+                          <h4 style={{ fontSize: 12, color: '#9ca3af', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <VideoIcon size={14} />
+                            Videa ze zápasu ({matchVideos.length})
+                          </h4>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                            {matchVideos.map(video => (
+                              <Link
+                                key={video.id}
+                                href={`/videos/${video.id}`}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 12,
+                                  padding: 12,
+                                  backgroundColor: '#1f2937',
+                                  borderRadius: 8,
+                                  textDecoration: 'none',
+                                  color: 'white',
+                                }}
+                              >
+                                {video.thumbnail_url ? (
+                                  <img
+                                    src={video.thumbnail_url}
+                                    alt=""
+                                    style={{ width: 60, height: 40, borderRadius: 4, objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <div style={{
+                                    width: 60,
+                                    height: 40,
+                                    backgroundColor: '#374151',
+                                    borderRadius: 4,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}>
+                                    <Play size={16} style={{ opacity: 0.5 }} />
+                                  </div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {video.title}
+                                  </p>
+                                  {video.duration && (
+                                    <p style={{ fontSize: 11, color: '#9ca3af' }}>
+                                      {Math.floor(video.duration / 60)}:{String(Math.floor(video.duration % 60)).padStart(2, '0')}
+                                    </p>
+                                  )}
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: 16 }}>
+                          K tomuto zápasu nejsou přiřazena žádná videa
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               );
             })}
+
+            {/* Orphaned videos section */}
+            {orphanedVideos.length > 0 && filterResult === 'all' && filterOpponent === 'all' && (
+              <div style={{
+                marginTop: 24,
+                padding: 16,
+                backgroundColor: '#1f2937',
+                borderRadius: 12,
+                borderLeft: '4px solid #6b7280',
+              }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <VideoIcon size={16} />
+                  Videa bez přiřazeného zápasu ({orphanedVideos.length})
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                  {orphanedVideos.slice(0, 6).map(video => (
+                    <Link
+                      key={video.id}
+                      href={`/videos/${video.id}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: 12,
+                        backgroundColor: '#111827',
+                        borderRadius: 8,
+                        textDecoration: 'none',
+                        color: 'white',
+                      }}
+                    >
+                      {video.thumbnail_url ? (
+                        <img
+                          src={video.thumbnail_url}
+                          alt=""
+                          style={{ width: 60, height: 40, borderRadius: 4, objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: 60,
+                          height: 40,
+                          backgroundColor: '#374151',
+                          borderRadius: 4,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <Play size={16} style={{ opacity: 0.5 }} />
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {video.title}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {new Date(video.created_at).toLocaleDateString('cs-CZ')}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                {orphanedVideos.length > 6 && (
+                  <Link
+                    href="/videos"
+                    style={{
+                      display: 'block',
+                      textAlign: 'center',
+                      marginTop: 12,
+                      color: '#3b82f6',
+                      textDecoration: 'none',
+                      fontSize: 13,
+                    }}
+                  >
+                    Zobrazit všech {orphanedVideos.length} videí →
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>
