@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 140">
+  <defs>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#22c55e"/>
+      <stop offset="100%" style="stop-color:#16a34a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Dynamic lines (speed effect) -->
+  <path d="M20 50 L60 50" stroke="#22c55e" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
+  <path d="M10 65 L50 65" stroke="#22c55e" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+  <path d="M25 80 L55 80" stroke="#22c55e" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- Main STAT text with dynamic slant -->
+  <text x="70" y="95" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="900" fill="#1f2937" letter-spacing="2" transform="skewX(-5)">
+    <tspan fill="url(#greenGrad)">S</tspan><tspan fill="#1f2937">TAT</tspan>
+  </text>
+
+  <!-- Football with motion trail -->
+  <ellipse cx="340" cy="55" rx="35" ry="30" fill="#22c55e" opacity="0.2"/>
+  <ellipse cx="350" cy="55" rx="30" ry="25" fill="#22c55e" opacity="0.4"/>
+  <circle cx="360" cy="55" r="22" fill="url(#greenGrad)"/>
+  <path d="M360 33 L360 77 M338 55 L382 55" stroke="white" stroke-width="2" fill="none" opacity="0.6"/>
+  <polygon points="360,43 367,55 360,67 353,55" fill="white"/>
+
+  <!-- Tagline -->
+  <text x="200" y="125" font-family="Arial, sans-serif" font-size="12" fill="#6b7280" text-anchor="middle" letter-spacing="4" font-weight="500">VIDEO ANALYSIS FOR COACHES</text>
+</svg>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background pill -->
+  <rect x="10" y="15" width="380" height="90" rx="45" fill="url(#grad1)"/>
+
+  <!-- STAT text -->
+  <text x="95" y="82" font-family="Arial Black, Arial, sans-serif" font-size="56" font-weight="900" fill="white" letter-spacing="8">STAT</text>
+
+  <!-- Football icon -->
+  <circle cx="55" cy="60" r="28" fill="white"/>
+  <path d="M55 32 L55 88 M27 60 L83 60 M33 40 L77 80 M33 80 L77 40" stroke="#3b82f6" stroke-width="2.5" fill="none"/>
+  <circle cx="55" cy="60" r="10" fill="#3b82f6"/>
+
+  <!-- Subtitle -->
+  <text x="200" y="108" font-family="Arial, sans-serif" font-size="10" fill="#64748b" text-anchor="middle" letter-spacing="3">SLATINA TRAINERS' ANALYTICS TOOL</text>
+</svg>

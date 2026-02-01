@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STAT Logo Návrhy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111827;
+      color: white;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 32px;
+      margin-bottom: 40px;
+      color: #f3f4f6;
+    }
+    .logos {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 40px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .logo-card {
+      background: #1f2937;
+      border-radius: 16px;
+      padding: 30px;
+      text-align: center;
+      flex: 1;
+      min-width: 300px;
+      max-width: 400px;
+    }
+    .logo-card h2 {
+      color: #9ca3af;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+    }
+    .logo-container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .logo-container.dark {
+      background: #111827;
+    }
+    .logo-container img {
+      max-width: 100%;
+      height: auto;
+    }
+    .logo-card p {
+      color: #6b7280;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .logo-card .style {
+      display: inline-block;
+      background: #374151;
+      color: #f3f4f6;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .variants {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 15px;
+    }
+    .variants span {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 STAT - Návrhy loga</h1>
+
+  <div class="logos">
+    <!-- Logo 1 -->
+    <div class="logo-card">
+      <h2>Návrh 1</h2>
+      <div class="logo-container">
+        <img src="stat-logo-1.svg" alt="STAT Logo 1">
+      </div>
+      <p>
+        <strong>Moderní & Čistý</strong><br>
+        Zaoblený tvar s výraznou typografií. Fotbalový míč integrovaný do designu.
+      </p>
+      <span class="style">Minimalistický</span>
+      <div class="variants">
+        <span>✓ Hlavička webu</span>
+        <span>✓ Favikona</span>
+      </div>
+    </div>
+
+    <!-- Logo 2 -->
+    <div class="logo-card">
+      <h2>Návrh 2</h2>
+      <div class="logo-container">
+        <img src="stat-logo-2.svg" alt="STAT Logo 2">
+      </div>
+      <p>
+        <strong>Dynamický & Sportovní</strong><br>
+        Zelená barva, efekt pohybu, nakloněné písmo. Evokuje rychlost a energii.
+      </p>
+      <span class="style">Dynamický</span>
+      <div class="variants">
+        <span>✓ Marketing</span>
+        <span>✓ Trička</span>
+      </div>
+    </div>
+
+    <!-- Logo 3 -->
+    <div class="logo-card">
+      <h2>Návrh 3</h2>
+      <div class="logo-container dark">
+        <img src="stat-logo-3.svg" alt="STAT Logo 3">
+      </div>
+      <p>
+        <strong>Klubový Erb</strong><br>
+        Tradiční štít s hvězdami. Propojuje STAT s SK Slatina 2017. Prestižní vzhled.
+      </p>
+      <span class="style">Tradiční</span>
+      <div class="variants">
+        <span>✓ Dresy</span>
+        <span>✓ Dokumenty</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; margin-top: 60px; color: #6b7280;">
+    <p>Soubory: <code>stat-logo-1.svg</code> | <code>stat-logo-2.svg</code> | <code>stat-logo-3.svg</code></p>
+    <p style="margin-top: 10px;">URL: <a href="/logos/preview.html" style="color: #3b82f6;">skslatina.fun/logos/preview.html</a></p>
+  </div>
+</body>
+</html>
