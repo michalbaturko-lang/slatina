@@ -223,7 +223,9 @@
       <li>Hodnocení hráčů</li>
       <li>Screenshoty a sdílení</li>
       <li>Historie zápasů</li>
+      <li>Správa hráčů v zápasech</li>
       <li>Tipy a triky</li>
+      <li>Historie verzí</li>
     </ol>
   </div>
 
@@ -568,6 +570,26 @@
     <strong>💡 Tip:</strong> První screenshot se automaticky nastaví jako náhled videa. Můžete to změnit tlačítkem 🖼️ v hlavičce.
   </div>
 
+  <h3>📐 Screenshot s výřezem (NOVINKA v1.1)</h3>
+  <p>Funkce Výřez umožňuje uložit pouze část obrazu - ideální pro detaily:</p>
+  <ol>
+    <li>Pozastavte video na důležitém místě</li>
+    <li>Klikněte na tlačítko "✂️ Výřez"</li>
+    <li>Otevře se celá obrazovka s aktuálním snímkem</li>
+    <li><strong>Táhněte myší</strong> pro výběr oblasti (min. 5% obrazu)</li>
+    <li>Vybraná oblast se zvýrazní zeleně, zbytek ztmavne</li>
+    <li>Klikněte "Uložit výřez"</li>
+  </ol>
+
+  <div class="feature-box">
+    <strong>Kdy použít Výřez:</strong>
+    <ul>
+      <li>Detail pozice jednoho hráče</li>
+      <li>Přiblížení na míč</li>
+      <li>Specifická situace bez okolního "šumu"</li>
+    </ul>
+  </div>
+
   <h3>Sdílení screenshotu</h3>
   <p>U každého screenshotu jsou tlačítka:</p>
   <ul>
@@ -627,9 +649,54 @@ Vytvořeno v Slatina Video Analysis
     <strong>Videa bez zápasu:</strong> Pokud jste nahráli video bez vyplnění zápasových informací, zobrazí se v sekci "Videa bez přiřazeného zápasu" na konci stránky.
   </div>
 
+  <!-- ==================== SPRÁVA HRÁČŮ ==================== -->
+  <div class="page-break"></div>
+  <h2>9. Správa hráčů v zápasech (NOVINKA v1.1)</h2>
+
+  <p>Ke každému zápasu můžete přiřadit hráče, kteří se ho zúčastnili. To usnadní pozdější statistiky a přehledy.</p>
+
+  <h3>Jak přiřadit hráče k zápasu</h3>
+  <ol>
+    <li>Otevřete stránku <strong>"Zápasy"</strong> (v navigaci)</li>
+    <li><strong>Klikněte na zápas</strong> pro jeho rozbalení</li>
+    <li>V sekci "Hráči v zápase" klikněte na tlačítko <strong>"Upravit"</strong></li>
+    <li>Zobrazí se seznam všech hráčů</li>
+    <li><strong>Zaškrtněte/odškrtněte</strong> hráče kliknutím na jejich jméno</li>
+    <li>Vybraní hráči se označí zeleně a fajfkou ✓</li>
+    <li>Klikněte na <strong>×</strong> pro zavření výběru</li>
+  </ol>
+
+  <div class="screen-mockup">
+┌─────────────────────────────────────────────────────────┐
+│  Hráči v zápase (5)                         [Upravit]  │
+├─────────────────────────────────────────────────────────┤
+│  [1 Batu] [2 Míša] [3 Filip] [4 Hugo] [5 Tomáš]        │
+├─────────────────────────────────────────────────────────┤
+│  Vyber hráče:                                     [×]  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐               │
+│  │ ✓ Batu   │ │ ✓ Míša   │ │ ✓ Filip  │               │
+│  │ (zelené) │ │ (zelené) │ │ (zelené) │               │
+│  └──────────┘ └──────────┘ └──────────┘               │
+│  ┌──────────┐ ┌──────────┐                             │
+│  │ 6 Honza  │ │ 7 Andri  │  (šedé = neúčastnili se)   │
+│  └──────────┘ └──────────┘                             │
+└─────────────────────────────────────────────────────────┘
+  </div>
+
+  <h3>Indikátor na kartě zápasu</h3>
+  <p>Pokud má zápas přiřazené hráče, zobrazí se zelený badge:</p>
+  <ul>
+    <li><span class="color-dot blue"></span><strong>Modrý badge</strong> - počet videí (např. "3 videí")</li>
+    <li><span class="color-dot green"></span><strong>Zelený badge</strong> - počet hráčů (např. "5 hráčů")</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>💡 Tip:</strong> Přiřazení hráčů k zápasům umožní v budoucnu generovat statistiky - kolik zápasů hráč odehrál, účast na trénincích apod.
+  </div>
+
   <!-- ==================== TIPY ==================== -->
   <div class="page-break"></div>
-  <h2>9. Tipy a triky</h2>
+  <h2>10. Tipy a triky</h2>
 
   <h3>Efektivní workflow</h3>
   <ol>
@@ -671,10 +738,59 @@ Vytvořeno v Slatina Video Analysis
     <strong>💡 Pro rodiče:</strong> Sdílejte především pochvaly (⭐) - motivují víc než kritika!
   </div>
 
+  <!-- ==================== HISTORIE VERZÍ ==================== -->
+  <div class="page-break"></div>
+  <h2>11. Historie verzí</h2>
+
+  <table>
+    <tr>
+      <th>Verze</th>
+      <th>Datum</th>
+      <th>Změny</th>
+    </tr>
+    <tr>
+      <td><strong>v1.1</strong></td>
+      <td>1.2.2026</td>
+      <td>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li><strong>Screenshot s výřezem</strong> - možnost vybrat pouze část obrazu</li>
+          <li><strong>Správa hráčů v zápasech</strong> - přiřazení hráčů k zápasům</li>
+          <li><strong>Oprava výběru hráčů</strong> - hráči se nyní správně zobrazují ve video editoru</li>
+          <li>Badge s počtem hráčů na kartě zápasu</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>v1.0</strong></td>
+      <td>31.1.2026</td>
+      <td>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li>Nahrávání videí ze zápasů (až 500 MB)</li>
+          <li>Video editor s kreslením</li>
+          <li>Hlasové komentáře s přepisem</li>
+          <li>Hodnocení situací (problém/zajímavé/pochvala)</li>
+          <li>Screenshoty a sdílení</li>
+          <li>Historie zápasů s filtry</li>
+          <li>Vytváření klipů pro hráče</li>
+        </ul>
+      </td>
+    </tr>
+  </table>
+
+  <div class="feature-box">
+    <strong>Plánované funkce:</strong>
+    <ul>
+      <li>Statistiky hráčů (góly, asistence, účast)</li>
+      <li>Export PDF reportů ze zápasů</li>
+      <li>Notifikace pro rodiče o nových videích</li>
+    </ul>
+  </div>
+
   <footer>
     <p><strong>SK Slatina 2017 - Videoanalýza</strong></p>
     <p>https://skslatina.fun</p>
-    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: Únor 2026</p>
+    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: <strong>v1.1</strong> (1.2.2026)</p>
+    <p style="font-size: 11px; color: #9ca3af;">Manuál: https://skslatina.fun/docs/manual-treneri.html</p>
   </footer>
 
 </body>
