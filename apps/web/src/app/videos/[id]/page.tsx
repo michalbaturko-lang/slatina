@@ -31,6 +31,7 @@ import {
   Download,
   Scissors,
   Flag,
+  Crop,
 } from 'lucide-react';
 import {
   getVideo,
@@ -172,6 +173,14 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [clipTitle, setClipTitle] = useState('');
   const [clipCategory, setClipCategory] = useState<'goal' | 'assist' | 'skill' | 'defense' | 'other'>('other');
   const [clipPlayer, setClipPlayer] = useState<Player | null>(null);
+
+  // Crop screenshot
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [cropImageData, setCropImageData] = useState<string | null>(null);
+  const [cropSelection, setCropSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [isCropSelecting, setIsCropSelecting] = useState(false);
+  const [cropStartPoint, setCropStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Responsive
   const [isMobile, setIsMobile] = useState(false);
@@ -496,6 +505,112 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       alert('Nepodařilo se vytvořit screenshot');
     }
   }, [video, currentTime]);
+
+  // Open crop mode - capture current frame for cropping
+  const openCropMode = useCallback(() => {
+    const videoEl = videoRef.current;
+    const annotationCanvas = canvasRef.current;
+    if (!videoEl) return;
+
+    const canvas = document.createElement('canvas');
+    const width = videoEl.videoWidth || 1280;
+    const height = videoEl.videoHeight || 720;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(videoEl, 0, 0, width, height);
+    if (annotationCanvas) {
+      ctx.drawImage(annotationCanvas, 0, 0, width, height);
+    }
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    setCropImageData(dataUrl);
+    setCropSelection(null);
+    setShowCropModal(true);
+  }, []);
+
+  // Handle crop selection
+  const handleCropMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    setCropStartPoint({ x, y });
+    setIsCropSelecting(true);
+    setCropSelection(null);
+  }, []);
+
+  const handleCropMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isCropSelecting || !cropStartPoint) return;
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    const selX = Math.min(cropStartPoint.x, x);
+    const selY = Math.min(cropStartPoint.y, y);
+    const selWidth = Math.abs(x - cropStartPoint.x);
+    const selHeight = Math.abs(y - cropStartPoint.y);
+
+    setCropSelection({ x: selX, y: selY, width: selWidth, height: selHeight });
+  }, [isCropSelecting, cropStartPoint]);
+
+  const handleCropMouseUp = useCallback(() => {
+    setIsCropSelecting(false);
+  }, []);
+
+  // Save cropped screenshot
+  const saveCroppedScreenshot = useCallback(async () => {
+    if (!cropImageData || !cropSelection || !video) return;
+
+    try {
+      // Load the full image
+      const img = new Image();
+      img.src = cropImageData;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      // Calculate crop area in pixels
+      const cropX = Math.floor(cropSelection.x * img.width);
+      const cropY = Math.floor(cropSelection.y * img.height);
+      const cropWidth = Math.floor(cropSelection.width * img.width);
+      const cropHeight = Math.floor(cropSelection.height * img.height);
+
+      // Create cropped canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = cropWidth;
+      canvas.height = cropHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+      const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+      // Upload to R2
+      const { publicUrl } = await uploadDataUrl(croppedDataUrl, 'screenshots', `screenshot-crop-${Date.now()}.jpg`);
+
+      // Save to Supabase
+      const newScreenshot = await createScreenshot({
+        video_id: video.id,
+        time: currentTime,
+        image_url: publicUrl,
+        annotations_json: null,
+      });
+
+      setScreenshots(prev => [...prev, newScreenshot]);
+      setShowCropModal(false);
+      setCropImageData(null);
+      setCropSelection(null);
+      alert('Výřez uložen!');
+    } catch (err) {
+      console.error('Crop screenshot failed:', err);
+      alert('Nepodařilo se uložit výřez');
+    }
+  }, [cropImageData, cropSelection, video, currentTime]);
 
   const handleDeleteScreenshot = useCallback((id: string) => {
     // Note: Delete from cloud not yet implemented
@@ -1039,6 +1154,20 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             >
               <Camera size={16} />
               Screenshot
+            </button>
+
+            <button
+              onClick={openCropMode}
+              style={{
+                padding: '8px 14px',
+                backgroundColor: '#1f2937',
+                border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+              }}
+              title="Screenshot s výřezem"
+            >
+              <Crop size={16} />
+              Výřez
             </button>
 
             {annotations.length > 0 && (
@@ -1761,6 +1890,108 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 Uložit klip
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Crop Screenshot Modal */}
+      {showCropModal && cropImageData && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', zIndex: 100 }}>
+          {/* Header */}
+          <div style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: 'white' }}>
+              📐 Vyberte oblast výřezu
+            </h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => { setShowCropModal(false); setCropImageData(null); setCropSelection(null); }}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#374151',
+                  border: 'none', borderRadius: 8, color: '#9ca3af', cursor: 'pointer',
+                }}
+              >
+                Zrušit
+              </button>
+              <button
+                onClick={saveCroppedScreenshot}
+                disabled={!cropSelection || cropSelection.width < 0.05 || cropSelection.height < 0.05}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: cropSelection && cropSelection.width >= 0.05 ? '#22c55e' : '#374151',
+                  border: 'none', borderRadius: 8, color: 'white', cursor: cropSelection ? 'pointer' : 'not-allowed',
+                  opacity: cropSelection && cropSelection.width >= 0.05 ? 1 : 0.5,
+                }}
+              >
+                Uložit výřez
+              </button>
+            </div>
+          </div>
+
+          {/* Canvas area */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
+            <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%' }}>
+              <img
+                src={cropImageData}
+                alt="Frame"
+                style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 150px)', objectFit: 'contain', display: 'block' }}
+                draggable={false}
+              />
+              <canvas
+                ref={cropCanvasRef}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  cursor: 'crosshair',
+                }}
+                onMouseDown={handleCropMouseDown}
+                onMouseMove={handleCropMouseMove}
+                onMouseUp={handleCropMouseUp}
+                onMouseLeave={handleCropMouseUp}
+              />
+              {/* Selection overlay */}
+              {cropSelection && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: `${cropSelection.y * 100}%`,
+                    left: `${cropSelection.x * 100}%`,
+                    width: `${cropSelection.width * 100}%`,
+                    height: `${cropSelection.height * 100}%`,
+                    border: '3px solid #22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    pointerEvents: 'none',
+                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+                  }}
+                >
+                  {/* Size indicator */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: -28,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    backgroundColor: '#22c55e',
+                    color: 'white',
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {Math.round(cropSelection.width * 100)}% × {Math.round(cropSelection.height * 100)}%
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div style={{ padding: 12, textAlign: 'center', borderTop: '1px solid #374151' }}>
+            <p style={{ color: '#9ca3af', fontSize: 13 }}>
+              Táhněte myší pro výběr oblasti. Oblast musí být alespoň 5% obrázku.
+            </p>
           </div>
         </div>
       )}
