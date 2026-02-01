@@ -27,28 +27,41 @@ import {
   Play,
 } from 'lucide-react';
 import {
-  getPlayerById,
-  getPlayerStats,
-  getMatchesForPlayer,
-  getGoalsForPlayer,
-  getCommentsForPlayer,
-  updatePlayer,
-  getPlayerPhotos,
-  addPlayerPhoto,
-  deletePlayerPhoto,
-  getPlayerClips,
-  addPlayerClip,
-  deletePlayerClip,
-  getMatches,
+  getPlayer as getPlayerCloud,
+  updatePlayer as updatePlayerCloud,
+  getPlayerPhotos as getPlayerPhotosCloud,
+  createPlayerPhoto,
+  deletePlayerPhoto as deletePlayerPhotoCloud,
+  getPlayerClips as getPlayerClipsCloud,
+  createPlayerClip,
+  deletePlayerClip as deletePlayerClipCloud,
+  getMatches as getMatchesCloud,
+  getGoals as getGoalsCloud,
   Player,
-  PlayerStats,
   Match,
   Goal,
-  CoachComment,
   PlayerPhoto,
   PlayerClip,
-} from '@/lib/team-store';
-import { getVideo } from '@/lib/demo-store';
+} from '@/lib/cloud-store';
+import { uploadDataUrl } from '@/lib/r2-upload';
+
+// Simplified stats interface
+interface PlayerStats {
+  playerId: string;
+  matchesPlayed: number;
+  goals: number;
+  assists: number;
+  commentsCount: number;
+}
+
+// Coach comment interface (not used from cloud yet)
+interface CoachComment {
+  id: string;
+  videoId: string;
+  time: number;
+  text: string;
+  playerIds: string[];
+}
 
 // Photo crop modal component
 function PhotoCropModal({
@@ -313,17 +326,44 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
   const [viewingPhoto, setViewingPhoto] = useState<PlayerPhoto | null>(null);
 
   useEffect(() => {
-    const loadData = () => {
-      const p = getPlayerById(params.id);
-      if (p) {
-        setPlayer(p);
-        setStats(getPlayerStats(p.id));
-        setMatches(getMatchesForPlayer(p.id));
-        setGoals(getGoalsForPlayer(p.id));
-        setComments(getCommentsForPlayer(p.id));
-        setPhotos(getPlayerPhotos(p.id));
-        setClips(getPlayerClips(p.id));
-        setAllMatches(getMatches());
+    const loadData = async () => {
+      try {
+        const p = await getPlayerCloud(params.id);
+        if (p) {
+          setPlayer(p);
+
+          // Load all data in parallel
+          const [photosData, clipsData, matchesData, goalsData] = await Promise.all([
+            getPlayerPhotosCloud(p.id),
+            getPlayerClipsCloud(p.id),
+            getMatchesCloud(),
+            getGoalsCloud(),
+          ]);
+
+          setPhotos(photosData);
+          setClips(clipsData);
+          setAllMatches(matchesData);
+
+          // Filter goals for this player
+          const playerGoals = goalsData.filter(g => g.scorer_id === p.id);
+          const playerAssists = goalsData.filter(g => g.assist_id === p.id);
+          setGoals(playerGoals);
+
+          // Calculate stats
+          setStats({
+            playerId: p.id,
+            matchesPlayed: 0, // Would need match_players table
+            goals: playerGoals.length,
+            assists: playerAssists.length,
+            commentsCount: 0,
+          });
+
+          // Matches for player - would need match_players join, for now show all
+          setMatches([]);
+          setComments([]);
+        }
+      } catch (err) {
+        console.error('Failed to load player data:', err);
       }
     };
     loadData();
@@ -353,11 +393,19 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     e.target.value = '';
   };
 
-  const handlePhotoCropSave = (croppedUrl: string) => {
+  const handlePhotoCropSave = async (croppedUrl: string) => {
     if (!player) return;
-    const updated = updatePlayer(player.id, { photoUrl: croppedUrl });
-    if (updated) {
-      setPlayer(updated);
+    try {
+      // Upload to R2 first
+      const { publicUrl } = await uploadDataUrl(croppedUrl, 'player-photos', `player-${player.id}-avatar.jpg`);
+      // Update player in Supabase
+      const updated = await updatePlayerCloud(player.id, { photo_url: publicUrl });
+      if (updated) {
+        setPlayer(updated);
+      }
+    } catch (err) {
+      console.error('Failed to save photo:', err);
+      alert('Nepodařilo se uložit fotku');
     }
     setPendingPhoto(null);
   };
@@ -385,30 +433,46 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     e.target.value = '';
   };
 
-  const saveGalleryPhoto = () => {
+  const saveGalleryPhoto = async () => {
     if (!player || !pendingGalleryPhoto) return;
-    const photo = addPlayerPhoto({
-      playerId: player.id,
-      photoUrl: pendingGalleryPhoto,
-      matchId: galleryPhotoMatch || undefined,
-      caption: galleryPhotoCaption || undefined,
-    });
-    setPhotos([photo, ...photos]);
+    try {
+      // Upload to R2 first
+      const { publicUrl } = await uploadDataUrl(pendingGalleryPhoto, 'player-photos', `player-${player.id}-gallery-${Date.now()}.jpg`);
+      // Save to Supabase
+      const photo = await createPlayerPhoto({
+        player_id: player.id,
+        photo_url: publicUrl,
+        match_id: galleryPhotoMatch || null,
+        caption: galleryPhotoCaption || null,
+      });
+      setPhotos([photo, ...photos]);
+    } catch (err) {
+      console.error('Failed to save gallery photo:', err);
+      alert('Nepodařilo se uložit fotku');
+    }
     setPendingGalleryPhoto(null);
     setGalleryPhotoCaption('');
     setGalleryPhotoMatch('');
   };
 
-  const handleDeletePhoto = (photoId: string) => {
+  const handleDeletePhoto = async (photoId: string) => {
     if (!confirm('Opravdu smazat fotku?')) return;
-    deletePlayerPhoto(photoId);
-    setPhotos(photos.filter(p => p.id !== photoId));
+    try {
+      await deletePlayerPhotoCloud(photoId);
+      setPhotos(photos.filter(p => p.id !== photoId));
+    } catch (err) {
+      console.error('Failed to delete photo:', err);
+    }
   };
 
-  const handleDeleteClip = (clipId: string) => {
+  const handleDeleteClip = async (clipId: string) => {
     if (!confirm('Opravdu smazat klip?')) return;
-    deletePlayerClip(clipId);
-    setClips(clips.filter(c => c.id !== clipId));
+    try {
+      await deletePlayerClipCloud(clipId);
+      setClips(clips.filter(c => c.id !== clipId));
+    } catch (err) {
+      console.error('Failed to delete clip:', err);
+    }
   };
 
   // QR code generation
@@ -435,25 +499,37 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     }
   };
 
-  const saveNumber = () => {
+  const saveNumber = async () => {
     if (!player) return;
-    const num = editNumber.trim() ? parseInt(editNumber, 10) : undefined;
-    const updated = updatePlayer(player.id, { number: num });
-    if (updated) setPlayer(updated);
+    const num = editNumber.trim() ? parseInt(editNumber, 10) : null;
+    try {
+      const updated = await updatePlayerCloud(player.id, { number: num });
+      if (updated) setPlayer(updated);
+    } catch (err) {
+      console.error('Failed to update number:', err);
+    }
     setIsEditingNumber(false);
   };
 
-  const saveName = () => {
+  const saveName = async () => {
     if (!player || !editName.trim()) return;
-    const updated = updatePlayer(player.id, { name: editName.trim() });
-    if (updated) setPlayer(updated);
+    try {
+      const updated = await updatePlayerCloud(player.id, { name: editName.trim() });
+      if (updated) setPlayer(updated);
+    } catch (err) {
+      console.error('Failed to update name:', err);
+    }
     setIsEditingName(false);
   };
 
-  const savePosition = () => {
+  const savePosition = async () => {
     if (!player) return;
-    const updated = updatePlayer(player.id, { position: editPosition.trim() || undefined });
-    if (updated) setPlayer(updated);
+    try {
+      const updated = await updatePlayerCloud(player.id, { position: editPosition.trim() || null });
+      if (updated) setPlayer(updated);
+    } catch (err) {
+      console.error('Failed to update position:', err);
+    }
     setIsEditingPosition(false);
   };
 
@@ -552,9 +628,9 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
         }}>
           {/* Photo with upload */}
           <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
-            {player.photoUrl ? (
+            {player.photo_url ? (
               <img
-                src={player.photoUrl}
+                src={player.photo_url}
                 alt={player.name}
                 style={{
                   width: 120,
@@ -754,10 +830,14 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
               {positions.map(pos => (
                 <button
                   key={pos}
-                  onClick={() => {
+                  onClick={async () => {
                     setEditPosition(pos);
-                    const updated = updatePlayer(player.id, { position: pos });
-                    if (updated) setPlayer(updated);
+                    try {
+                      const updated = await updatePlayerCloud(player.id, { position: pos });
+                      if (updated) setPlayer(updated);
+                    } catch (err) {
+                      console.error('Failed to update position:', err);
+                    }
                     setIsEditingPosition(false);
                   }}
                   style={{

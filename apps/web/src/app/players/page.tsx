@@ -14,28 +14,49 @@ import {
   Edit2,
 } from 'lucide-react';
 import {
-  getPlayers,
-  getPlayerStats,
-  getTeam,
+  getPlayers as getPlayersCloud,
   Player,
-  PlayerStats,
-} from '@/lib/team-store';
+} from '@/lib/cloud-store';
+import { getTeam } from '@/lib/team-store';
+
+// Simplified stats for now - will be computed from cloud data
+interface PlayerStats {
+  playerId: string;
+  matchesPlayed: number;
+  goals: number;
+  assists: number;
+  commentsCount: number;
+}
 
 export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [stats, setStats] = useState<Record<string, PlayerStats>>({});
+  const [loading, setLoading] = useState(true);
   const team = typeof window !== 'undefined' ? getTeam() : null;
 
   useEffect(() => {
-    const loadData = () => {
-      const playerList = getPlayers();
-      setPlayers(playerList);
+    const loadData = async () => {
+      try {
+        const playerList = await getPlayersCloud();
+        setPlayers(playerList);
 
-      const statsMap: Record<string, PlayerStats> = {};
-      playerList.forEach(p => {
-        statsMap[p.id] = getPlayerStats(p.id);
-      });
-      setStats(statsMap);
+        // Initialize empty stats for now - can be enhanced later
+        const statsMap: Record<string, PlayerStats> = {};
+        playerList.forEach(p => {
+          statsMap[p.id] = {
+            playerId: p.id,
+            matchesPlayed: 0,
+            goals: 0,
+            assists: 0,
+            commentsCount: 0,
+          };
+        });
+        setStats(statsMap);
+      } catch (err) {
+        console.error('Failed to load players:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     loadData();
   }, []);
