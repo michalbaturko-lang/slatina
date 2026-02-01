@@ -397,7 +397,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     if (!player) return;
     try {
       // Upload to R2 first
-      const { publicUrl } = await uploadDataUrl(croppedUrl, 'player-photos', `player-${player.id}-avatar.jpg`);
+      const { publicUrl } = await uploadDataUrl(croppedUrl, 'photos', `player-${player.id}-avatar.jpg`);
       // Update player in Supabase
       const updated = await updatePlayerCloud(player.id, { photo_url: publicUrl });
       if (updated) {
@@ -437,7 +437,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     if (!player || !pendingGalleryPhoto) return;
     try {
       // Upload to R2 first
-      const { publicUrl } = await uploadDataUrl(pendingGalleryPhoto, 'player-photos', `player-${player.id}-gallery-${Date.now()}.jpg`);
+      const { publicUrl } = await uploadDataUrl(pendingGalleryPhoto, 'photos', `player-${player.id}-gallery-${Date.now()}.jpg`);
       // Save to Supabase
       const photo = await createPlayerPhoto({
         player_id: player.id,
