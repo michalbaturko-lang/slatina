@@ -13,6 +13,7 @@ import { getVideos, getMatches, Video as VideoType, Match } from '@/lib/cloud-st
 export default function Home() {
   const [recentVideos, setRecentVideos] = useState<VideoType[]>([]);
   const [recentMatches, setRecentMatches] = useState<Match[]>([]);
+  const [totalVideos, setTotalVideos] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function Home() {
           getVideos(),
           getMatches(),
         ]);
+        setTotalVideos(videos.length);
         setRecentVideos(videos.slice(0, 5));
         setRecentMatches(matches.slice(0, 3));
       } catch (err) {
@@ -176,7 +178,7 @@ export default function Home() {
                   </div>
                   {recentVideos.length > 3 && (
                     <Link href="/videos" className="block text-center text-sm text-blue-400 hover:text-blue-300 mt-3">
-                      Zobrazit všech {recentVideos.length} videí →
+                      Zobrazit všech {totalVideos} videí →
                     </Link>
                   )}
                 </div>

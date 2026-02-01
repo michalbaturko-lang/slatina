@@ -714,16 +714,44 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   // Share screenshot using native Share API
   const shareScreenshot = useCallback(async (screenshot: Screenshot) => {
     try {
-      // Open image in new tab or download
-      const link = document.createElement('a');
-      link.href = screenshot.image_url;
-      link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
-      link.target = '_blank';
-      link.click();
+      // Try to use Web Share API first (works on mobile)
+      if (navigator.share) {
+        // Fetch the image and create a file for sharing
+        const response = await fetch(screenshot.image_url);
+        const blob = await response.blob();
+        const file = new File([blob], `screenshot-${formatTime(screenshot.time)}.jpg`, { type: 'image/jpeg' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Screenshot - ${video?.title || 'Video'}`,
+            text: `Screenshot z času ${formatTime(screenshot.time)}`,
+            files: [file],
+          });
+          return;
+        }
+
+        // Fallback: share URL only
+        await navigator.share({
+          title: `Screenshot - ${video?.title || 'Video'}`,
+          text: `Screenshot z času ${formatTime(screenshot.time)}`,
+          url: screenshot.image_url,
+        });
+        return;
+      }
+
+      // Fallback for desktop: copy URL to clipboard
+      await navigator.clipboard.writeText(screenshot.image_url);
+      alert('Odkaz na screenshot zkopírován do schránky!');
     } catch (err) {
-      console.error('Share failed:', err);
+      // User cancelled share or error - fallback to download
+      if ((err as Error).name !== 'AbortError') {
+        const link = document.createElement('a');
+        link.href = screenshot.image_url;
+        link.download = `screenshot-${formatTime(screenshot.time)}.jpg`;
+        link.click();
+      }
     }
-  }, []);
+  }, [video]);
 
   const handleDeleteAudio = useCallback((id: string) => {
     // Note: Delete from cloud not yet implemented
