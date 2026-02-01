@@ -181,6 +181,8 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [isCropSelecting, setIsCropSelecting] = useState(false);
   const [cropStartPoint, setCropStartPoint] = useState<{ x: number; y: number } | null>(null);
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [savedCropUrl, setSavedCropUrl] = useState<string | null>(null);
+  const [showCropThumbnailChoice, setShowCropThumbnailChoice] = useState(false);
 
   // Responsive
   const [isMobile, setIsMobile] = useState(false);
@@ -551,15 +553,90 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    const selX = Math.min(cropStartPoint.x, x);
-    const selY = Math.min(cropStartPoint.y, y);
-    const selWidth = Math.abs(x - cropStartPoint.x);
-    const selHeight = Math.abs(y - cropStartPoint.y);
+    // Calculate width based on mouse position
+    let selWidth = Math.abs(x - cropStartPoint.x);
+    // Enforce 16:9 aspect ratio - height is calculated from width
+    // Since we use relative coordinates, we need to account for canvas aspect ratio
+    const canvasAspect = rect.width / rect.height;
+    let selHeight = (selWidth * canvasAspect) / (16 / 9);
 
-    setCropSelection({ x: selX, y: selY, width: selWidth, height: selHeight });
+    // Ensure selection stays within bounds
+    if (selHeight > 1) {
+      selHeight = 1;
+      selWidth = selHeight * (16 / 9) / canvasAspect;
+    }
+    if (selWidth > 1) {
+      selWidth = 1;
+      selHeight = (selWidth * canvasAspect) / (16 / 9);
+    }
+
+    // Calculate top-left position
+    const selX = x >= cropStartPoint.x ? cropStartPoint.x : cropStartPoint.x - selWidth;
+    const selY = y >= cropStartPoint.y ? cropStartPoint.y : cropStartPoint.y - selHeight;
+
+    // Clamp to bounds
+    const clampedX = Math.max(0, Math.min(selX, 1 - selWidth));
+    const clampedY = Math.max(0, Math.min(selY, 1 - selHeight));
+
+    setCropSelection({ x: clampedX, y: clampedY, width: selWidth, height: selHeight });
   }, [isCropSelecting, cropStartPoint]);
 
   const handleCropMouseUp = useCallback(() => {
+    setIsCropSelecting(false);
+  }, []);
+
+  // Touch support for mobile
+  const handleCropTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (touch.clientX - rect.left) / rect.width;
+    const y = (touch.clientY - rect.top) / rect.height;
+    setCropStartPoint({ x, y });
+    setIsCropSelecting(true);
+    setCropSelection(null);
+  }, []);
+
+  const handleCropTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!isCropSelecting || !cropStartPoint) return;
+    const touch = e.touches[0];
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (touch.clientX - rect.left) / rect.width;
+    const y = (touch.clientY - rect.top) / rect.height;
+
+    // Calculate width based on touch position
+    let selWidth = Math.abs(x - cropStartPoint.x);
+    // Enforce 16:9 aspect ratio
+    const canvasAspect = rect.width / rect.height;
+    let selHeight = (selWidth * canvasAspect) / (16 / 9);
+
+    // Ensure selection stays within bounds
+    if (selHeight > 1) {
+      selHeight = 1;
+      selWidth = selHeight * (16 / 9) / canvasAspect;
+    }
+    if (selWidth > 1) {
+      selWidth = 1;
+      selHeight = (selWidth * canvasAspect) / (16 / 9);
+    }
+
+    // Calculate top-left position
+    const selX = x >= cropStartPoint.x ? cropStartPoint.x : cropStartPoint.x - selWidth;
+    const selY = y >= cropStartPoint.y ? cropStartPoint.y : cropStartPoint.y - selHeight;
+
+    // Clamp to bounds
+    const clampedX = Math.max(0, Math.min(selX, 1 - selWidth));
+    const clampedY = Math.max(0, Math.min(selY, 1 - selHeight));
+
+    setCropSelection({ x: clampedX, y: clampedY, width: selWidth, height: selHeight });
+  }, [isCropSelecting, cropStartPoint]);
+
+  const handleCropTouchEnd = useCallback(() => {
     setIsCropSelecting(false);
   }, []);
 
@@ -605,12 +682,29 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       setShowCropModal(false);
       setCropImageData(null);
       setCropSelection(null);
-      alert('Výřez uložen!');
+      // Show choice modal - save URL for potential thumbnail use
+      setSavedCropUrl(publicUrl);
+      setShowCropThumbnailChoice(true);
     } catch (err) {
       console.error('Crop screenshot failed:', err);
       alert('Nepodařilo se uložit výřez');
     }
   }, [cropImageData, cropSelection, video, currentTime]);
+
+  // Set cropped screenshot as video thumbnail
+  const setCropAsThumbnail = useCallback(async () => {
+    if (!video || !savedCropUrl) return;
+    try {
+      await updateVideo(video.id, { thumbnail_url: savedCropUrl });
+      setVideo(prev => prev ? { ...prev, thumbnail_url: savedCropUrl } : null);
+      setShowCropThumbnailChoice(false);
+      setSavedCropUrl(null);
+      alert('Náhled videa nastaven!');
+    } catch (err) {
+      console.error('Failed to set thumbnail:', err);
+      alert('Nepodařilo se nastavit náhled');
+    }
+  }, [video, savedCropUrl]);
 
   const handleDeleteScreenshot = useCallback((id: string) => {
     // Note: Delete from cloud not yet implemented
@@ -1946,11 +2040,15 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                   width: '100%',
                   height: '100%',
                   cursor: 'crosshair',
+                  touchAction: 'none',
                 }}
                 onMouseDown={handleCropMouseDown}
                 onMouseMove={handleCropMouseMove}
                 onMouseUp={handleCropMouseUp}
                 onMouseLeave={handleCropMouseUp}
+                onTouchStart={handleCropTouchStart}
+                onTouchMove={handleCropTouchMove}
+                onTouchEnd={handleCropTouchEnd}
               />
               {/* Selection overlay */}
               {cropSelection && (
@@ -1980,7 +2078,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                     fontSize: 11,
                     whiteSpace: 'nowrap',
                   }}>
-                    {Math.round(cropSelection.width * 100)}% × {Math.round(cropSelection.height * 100)}%
+                    16:9 • {Math.round(cropSelection.width * 100)}% × {Math.round(cropSelection.height * 100)}%
                   </div>
                 </div>
               )}
@@ -1990,8 +2088,51 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           {/* Instructions */}
           <div style={{ padding: 12, textAlign: 'center', borderTop: '1px solid #374151' }}>
             <p style={{ color: '#9ca3af', fontSize: 13 }}>
-              Táhněte myší pro výběr oblasti. Oblast musí být alespoň 5% obrázku.
+              📱 Táhněte prstem nebo myší pro výběr. Poměr stran 16:9 pro náhled videa.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Crop Thumbnail Choice Modal */}
+      {showCropThumbnailChoice && savedCropUrl && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: 16, padding: 24, width: '90%', maxWidth: 360, textAlign: 'center' }}>
+            <div style={{ marginBottom: 16 }}>
+              <img
+                src={savedCropUrl}
+                alt="Výřez"
+                style={{ width: '100%', borderRadius: 8, marginBottom: 12 }}
+              />
+              <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+                ✅ Výřez uložen!
+              </h3>
+              <p style={{ fontSize: 14, color: '#9ca3af' }}>
+                Chcete tento výřez nastavit jako náhled videa?
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                onClick={setCropAsThumbnail}
+                style={{
+                  width: '100%', padding: 14,
+                  backgroundColor: '#22c55e', border: 'none', borderRadius: 10,
+                  color: 'white', fontWeight: 600, fontSize: 15, cursor: 'pointer',
+                }}
+              >
+                🖼️ Nastavit jako náhled videa
+              </button>
+              <button
+                onClick={() => { setShowCropThumbnailChoice(false); setSavedCropUrl(null); }}
+                style={{
+                  width: '100%', padding: 14,
+                  backgroundColor: '#374151', border: 'none', borderRadius: 10,
+                  color: '#9ca3af', fontWeight: 500, fontSize: 15, cursor: 'pointer',
+                }}
+              >
+                Jen uložit do screenshotů
+              </button>
+            </div>
           </div>
         </div>
       )}
