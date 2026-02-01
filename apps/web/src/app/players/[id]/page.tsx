@@ -43,7 +43,7 @@ import {
   PlayerPhoto,
   PlayerClip,
 } from '@/lib/cloud-store';
-import { uploadDataUrl } from '@/lib/r2-upload';
+import { uploadDataUrl } from '@/lib/upload';
 
 // Simplified stats interface
 interface PlayerStats {
