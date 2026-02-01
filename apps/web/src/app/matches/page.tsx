@@ -27,6 +27,8 @@ import {
   getMatchPlayers as getMatchPlayersCloud,
   addPlayerToMatch,
   removePlayerFromMatch,
+  createMatch,
+  updateVideo,
   Match,
   Video,
   Player,
@@ -46,6 +48,7 @@ export default function MatchesPage() {
   const [filterOpponent, setFilterOpponent] = useState<string>('all');
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const [showPlayerSelector, setShowPlayerSelector] = useState<string | null>(null);
+  const [creatingMatchFromOrphans, setCreatingMatchFromOrphans] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -133,6 +136,72 @@ export default function MatchesPage() {
   const orphanedVideos = useMemo(() => {
     return videos.filter(v => !v.match_id);
   }, [videos]);
+
+  // Create match from orphan videos and assign them
+  const createMatchFromOrphans = async () => {
+    if (orphanedVideos.length === 0) return;
+
+    setCreatingMatchFromOrphans(true);
+
+    // Try to extract match info from video titles
+    const firstTitle = orphanedVideos[0].title;
+    // Pattern: "Slatina-Opponent Score" or "vs. Opponent"
+    const matchPattern = /Slatina[- ]+([\w]+)\s*(\d+:\d+)?/i;
+    const vsPattern = /vs\.\s*([\w]+)/i;
+
+    let matchName = 'Zápas';
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+
+    const match1 = firstTitle.match(matchPattern);
+    const match2 = firstTitle.match(vsPattern);
+
+    if (match1) {
+      matchName = `Slatina vs ${match1[1]}`;
+      if (match1[2]) {
+        const [home, away] = match1[2].split(':').map(Number);
+        goalsFor = home || 0;
+        goalsAgainst = away || 0;
+      }
+    } else if (match2) {
+      matchName = `Slatina vs ${match2[1]}`;
+    }
+
+    try {
+      // Create the match
+      const newMatch = await createMatch({
+        name: matchName,
+        date: orphanedVideos[0].created_at.split('T')[0],
+        type: 'match',
+        opponent_id: null,
+        goals_for: goalsFor,
+        goals_against: goalsAgainst,
+        notes: `Automaticky vytvořeno z ${orphanedVideos.length} videí`,
+      });
+
+      // Assign all orphan videos to this match
+      await Promise.all(
+        orphanedVideos.map(video =>
+          updateVideo(video.id, { match_id: newMatch.id })
+        )
+      );
+
+      // Update local state
+      setMatches(prev => [newMatch, ...prev]);
+      setVideos(prev => prev.map(v =>
+        orphanedVideos.find(ov => ov.id === v.id)
+          ? { ...v, match_id: newMatch.id }
+          : v
+      ));
+
+      alert(`Vytvořen zápas "${matchName}" s ${orphanedVideos.length} videi!`);
+    } catch (err) {
+      console.error('Failed to create match from orphans:', err);
+      alert('Nepodařilo se vytvořit zápas');
+    } finally {
+      setCreatingMatchFromOrphans(false);
+    }
+  };
 
   const filteredMatches = useMemo(() => {
     return matches.filter(match => {
@@ -725,10 +794,33 @@ export default function MatchesPage() {
                 borderRadius: 12,
                 borderLeft: '4px solid #6b7280',
               }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <VideoIcon size={16} />
-                  Videa bez přiřazeného zápasu ({orphanedVideos.length})
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <VideoIcon size={16} />
+                    Videa bez přiřazeného zápasu ({orphanedVideos.length})
+                  </h3>
+                  <button
+                    onClick={createMatchFromOrphans}
+                    disabled={creatingMatchFromOrphans}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 12px',
+                      backgroundColor: '#22c55e',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'white',
+                      cursor: creatingMatchFromOrphans ? 'wait' : 'pointer',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      opacity: creatingMatchFromOrphans ? 0.7 : 1,
+                    }}
+                  >
+                    <Plus size={14} />
+                    {creatingMatchFromOrphans ? 'Vytvářím...' : 'Vytvořit zápas'}
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
                   {orphanedVideos.slice(0, 6).map(video => (
                     <Link
