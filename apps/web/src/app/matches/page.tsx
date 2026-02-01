@@ -20,8 +20,19 @@ import {
   X,
   Check,
 } from 'lucide-react';
-import { getMatches, getVideos, Match, Video } from '@/lib/cloud-store';
-import { OPPONENT_TEAMS, getPlayers, Player, getMatchById as getLocalMatch, updateMatch as updateLocalMatch, Match as LocalMatch } from '@/lib/team-store';
+import {
+  getMatches,
+  getVideos,
+  getPlayers,
+  getMatchPlayers as getMatchPlayersCloud,
+  addPlayerToMatch,
+  removePlayerFromMatch,
+  Match,
+  Video,
+  Player,
+  MatchPlayer,
+} from '@/lib/cloud-store';
+import { OPPONENT_TEAMS } from '@/lib/team-store';
 
 type ResultFilter = 'all' | 'win' | 'loss' | 'draw';
 
@@ -39,22 +50,29 @@ export default function MatchesPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [matchesData, videosData] = await Promise.all([
+        const [matchesData, videosData, playersData] = await Promise.all([
           getMatches(),
           getVideos(),
+          getPlayers(),
         ]);
         setMatches(matchesData);
         setVideos(videosData);
-
-        // Load players from team-store
-        const playersData = getPlayers();
         setPlayers(playersData.filter(p => p.active));
 
-        // Load match-player associations from localStorage
-        const storedMatchPlayers = localStorage.getItem('slatina-match-players-map');
-        if (storedMatchPlayers) {
-          setMatchPlayers(JSON.parse(storedMatchPlayers));
-        }
+        // Load match-player associations for all matches from cloud
+        const matchPlayerMap: Record<string, string[]> = {};
+        await Promise.all(
+          matchesData.map(async (match) => {
+            try {
+              const mpData = await getMatchPlayersCloud(match.id);
+              matchPlayerMap[match.id] = mpData.map(mp => mp.player_id);
+            } catch (err) {
+              // Table might not exist or be empty
+              matchPlayerMap[match.id] = [];
+            }
+          })
+        );
+        setMatchPlayers(matchPlayerMap);
       } catch (err) {
         console.error('Failed to load data:', err);
       } finally {
@@ -64,17 +82,40 @@ export default function MatchesPage() {
     loadData();
   }, []);
 
-  // Toggle player for a match
-  const togglePlayerForMatch = (matchId: string, playerId: string) => {
+  // Toggle player for a match - now saves to cloud
+  const togglePlayerForMatch = async (matchId: string, playerId: string) => {
+    const current = matchPlayers[matchId] || [];
+    const isAdding = !current.includes(playerId);
+
+    // Optimistic update
     setMatchPlayers(prev => {
-      const current = prev[matchId] || [];
-      const updated = current.includes(playerId)
-        ? current.filter(id => id !== playerId)
-        : [...current, playerId];
-      const newState = { ...prev, [matchId]: updated };
-      localStorage.setItem('slatina-match-players-map', JSON.stringify(newState));
-      return newState;
+      const updated = isAdding
+        ? [...current, playerId]
+        : current.filter(id => id !== playerId);
+      return { ...prev, [matchId]: updated };
     });
+
+    try {
+      if (isAdding) {
+        await addPlayerToMatch({
+          match_id: matchId,
+          player_id: playerId,
+          played: true,
+          minutes_played: null,
+          goals: 0,
+          assists: 0,
+        });
+      } else {
+        await removePlayerFromMatch(matchId, playerId);
+      }
+    } catch (err) {
+      console.error('Failed to update match players:', err);
+      // Revert on error
+      setMatchPlayers(prev => ({
+        ...prev,
+        [matchId]: current,
+      }));
+    }
   };
 
   // Get players for a specific match
