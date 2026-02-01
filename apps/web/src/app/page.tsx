@@ -11,6 +11,33 @@ import {
 export default function Home() {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header Navigation */}
+      <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="SK Slatina" width={32} height={32} className="rounded" />
+            <span className="font-semibold hidden sm:inline">SK Slatina 2017</span>
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/players" className="flex items-center gap-1 text-gray-300 hover:text-white transition text-sm">
+              <Users className="w-4 h-4" />
+              Hráči
+            </Link>
+            <Link href="/matches" className="flex items-center gap-1 text-gray-300 hover:text-white transition text-sm">
+              <Trophy className="w-4 h-4" />
+              Zápasy
+            </Link>
+            <Link
+              href="/videos/upload"
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"
+            >
+              <Upload className="w-4 h-4" />
+              Nahrát video
+            </Link>
+          </nav>
+        </div>
+      </header>
+
       {/* Hero Section */}
       <section className="relative py-20 px-4">
         <div className="max-w-6xl mx-auto text-center">
@@ -30,17 +57,9 @@ export default function Home() {
             Platforma pro analýzu sportovních videí
           </p>
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-12">
-            Nahrávejte videa ze zápasů, kreslte přímo na video, přidávejte hlasové komentáře
+            Nahrávejte videa ze zápasů, kreslete přímo na video, přidávejte hlasové komentáře
             a sdílejte analýzy s hráči a rodiči.
           </p>
-
-          {/* Demo notice */}
-          <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-8 max-w-xl mx-auto">
-            <p className="text-sm text-blue-300">
-              <strong>Demo verze:</strong> Videa se ukládají lokálně ve vašem prohlížeči.
-              Nahrajte vlastní video pro testování všech funkcí.
-            </p>
-          </div>
 
           <div className="flex gap-4 justify-center flex-wrap">
             <Link
@@ -48,7 +67,7 @@ export default function Home() {
               className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
             >
               <Video className="w-5 h-5" />
-              Moje videa
+              Analyzovat videa
               <ChevronRight className="w-4 h-4" />
             </Link>
             <Link
@@ -62,15 +81,49 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* How it works - MOVED ABOVE "Co to umí" */}
       <section className="py-20 px-4 bg-gray-800/50">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-12">Jak na to</h2>
+          <div className="grid md:grid-cols-5 gap-4">
+            <StepCard
+              number={1}
+              title="Nahraj video"
+              description="Vyber video ze zápasu nebo tréninku z telefonu či počítače"
+            />
+            <StepCard
+              number={2}
+              title="Vyplň info"
+              description="Zvol zápas/trénink, zadej výsledek a vyber protihráče"
+            />
+            <StepCard
+              number={3}
+              title="Analyzuj"
+              description="Kresli na video, nahrávej komentáře, pořizuj screenshoty"
+            />
+            <StepCard
+              number={4}
+              title="Taguj hráče"
+              description="Označ hráče, kterých se situace týká"
+            />
+            <StepCard
+              number={5}
+              title="Sdílej"
+              description="Pošli shrnutí nebo screenshoty rodičům a hráčům"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20 px-4">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Co to umí</h2>
           <div className="grid md:grid-cols-4 sm:grid-cols-2 gap-6">
             <FeatureCard
               icon={<Pencil className="w-5 h-5" />}
               title="Kreslení na video"
-              description="Šipky, kruhy, čáry - kreslte přímo na video a vysvětlujte situace"
+              description="Šipky, kruhy, čáry - kreslete přímo na video a vysvětlujte situace"
             />
             <FeatureCard
               icon={<Mic className="w-5 h-5" />}
@@ -131,57 +184,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it works */}
-      <section className="py-20 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Jak na to</h2>
-          <div className="grid md:grid-cols-5 gap-4">
-            <StepCard
-              number={1}
-              title="Nahraj video"
-              description="Vyber video ze zápasu nebo tréninku z telefonu či počítače"
-            />
-            <StepCard
-              number={2}
-              title="Vyplň info"
-              description="Zvol zápas/trénink, zadej výsledek a vyber protihráče"
-            />
-            <StepCard
-              number={3}
-              title="Analyzuj"
-              description="Kresli na video, nahrávej komentáře, pořizuj screenshoty"
-            />
-            <StepCard
-              number={4}
-              title="Taguj hráče"
-              description="Označ hráče, kterých se situace týká"
-            />
-            <StepCard
-              number={5}
-              title="Sdílej"
-              description="Pošli shrnutí nebo screenshoty rodičům a hráčům"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-16 px-4 bg-blue-900/30">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-4">Začněte hned</h2>
-          <p className="text-gray-400 mb-8">
-            Nahrajte své první video a vyzkoušejte všechny funkce platformy.
-          </p>
-          <Link
-            href="/videos/upload"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-          >
-            <Upload className="w-5 h-5" />
-            Nahrát první video
-          </Link>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="py-8 px-4 border-t border-gray-800">
         <div className="max-w-6xl mx-auto text-center text-gray-500 text-sm">
@@ -189,7 +191,6 @@ export default function Home() {
             <Image src="/logo.svg" alt="SK Slatina" width={24} height={24} className="rounded" />
             <p>SK Slatina 2017 - Platforma pro analýzu videí</p>
           </div>
-          <p>Demo verze pro testování</p>
         </div>
       </footer>
     </div>
