@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SK Slatina 2017 - Videoanalýza - Manuál pro trenéry</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #1f2937;
+      background: white;
+      padding: 40px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    @media print {
+      body { padding: 20px; }
+      .page-break { page-break-before: always; }
+      .no-print { display: none; }
+    }
+
+    h1 {
+      font-size: 32px;
+      color: #1e40af;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #6b7280;
+      font-size: 18px;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 24px;
+      color: #1e40af;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #dbeafe;
+    }
+
+    h3 {
+      font-size: 18px;
+      color: #374151;
+      margin-top: 24px;
+      margin-bottom: 12px;
+    }
+
+    p { margin-bottom: 12px; }
+
+    .toc {
+      background: #f3f4f6;
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 40px;
+    }
+
+    .toc h2 {
+      margin-top: 0;
+      border: none;
+      padding: 0;
+    }
+
+    .toc ol {
+      margin-left: 24px;
+    }
+
+    .toc li {
+      margin: 8px 0;
+    }
+
+    .feature-box {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 16px;
+      margin: 16px 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .tip-box {
+      background: #ecfdf5;
+      border-left: 4px solid #10b981;
+      padding: 16px;
+      margin: 16px 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .warning-box {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 16px;
+      margin: 16px 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .step {
+      display: flex;
+      gap: 16px;
+      margin: 16px 0;
+      align-items: flex-start;
+    }
+
+    .step-number {
+      width: 32px;
+      height: 32px;
+      background: #3b82f6;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .step-content {
+      flex: 1;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+    }
+
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 12px;
+      text-align: left;
+    }
+
+    th {
+      background: #f3f4f6;
+      font-weight: 600;
+    }
+
+    .icon {
+      display: inline-block;
+      width: 24px;
+      text-align: center;
+    }
+
+    .screen-mockup {
+      background: #1f2937;
+      color: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin: 16px 0;
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .color-dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .green { background: #22c55e; }
+    .red { background: #ef4444; }
+    .orange { background: #f97316; }
+    .purple { background: #a855f7; }
+    .blue { background: #3b82f6; }
+    .yellow { background: #eab308; }
+
+    footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .logo-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .logo-header img {
+      width: 80px;
+      height: 80px;
+    }
+
+    ul {
+      margin-left: 24px;
+      margin-bottom: 12px;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo-header">
+    <div style="font-size: 60px;">⚽</div>
+  </div>
+
+  <h1>SK Slatina 2017</h1>
+  <p class="subtitle">Videoanalýza - Manuál pro trenéry</p>
+
+  <div class="toc">
+    <h2>Obsah</h2>
+    <ol>
+      <li>Úvod a přihlášení</li>
+      <li>Nahrání videa ze zápasu</li>
+      <li>Video editor - základní ovládání</li>
+      <li>Kreslení na video</li>
+      <li>Hlasové komentáře</li>
+      <li>Hodnocení hráčů</li>
+      <li>Screenshoty a sdílení</li>
+      <li>Historie zápasů</li>
+      <li>Tipy a triky</li>
+    </ol>
+  </div>
+
+  <!-- ==================== ÚVOD ==================== -->
+  <h2>1. Úvod a přihlášení</h2>
+
+  <p>Aplikace Slatina Videoanalýza je webová aplikace pro analýzu videí ze zápasů a tréninků. Funguje na telefonu i počítači.</p>
+
+  <div class="feature-box">
+    <strong>Webová adresa:</strong> https://skslatina.fun
+  </div>
+
+  <h3>Co aplikace umí</h3>
+  <ul>
+    <li><strong>Nahrávat videa</strong> ze zápasů a tréninků (až 500 MB)</li>
+    <li><strong>Kreslit na video</strong> - šipky, kruhy, označení hráčů</li>
+    <li><strong>Nahrávat hlasové komentáře</strong> s automatickým přepisem</li>
+    <li><strong>Hodnotit situace</strong> - pochvaly, problémy, zajímavé momenty</li>
+    <li><strong>Vytvářet screenshoty</strong> důležitých momentů</li>
+    <li><strong>Sdílet</strong> analýzy s rodiči a hráči</li>
+  </ul>
+
+  <!-- ==================== NAHRÁNÍ VIDEA ==================== -->
+  <div class="page-break"></div>
+  <h2>2. Nahrání videa ze zápasu</h2>
+
+  <h3>Postup nahrání</h3>
+
+  <div class="step">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <strong>Otevřete stránku</strong><br>
+      Klikněte na tlačítko "Nahrát video" v horní navigaci
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <strong>Vyberte typ</strong><br>
+      Zvolte zda jde o Zápas nebo Trénink
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <strong>Vyplňte informace (pro zápas)</strong><br>
+      <ul>
+        <li>Vyberte soupeře ze seznamu</li>
+        <li>Zaškrtněte "Je součástí turnaje" pokud ano (Vinohrady, Žabčice...)</li>
+        <li>Zadejte datum zápasu</li>
+        <li>Vyplňte skóre</li>
+        <li>Volitelně: přidejte úvodní komentář k zápasu</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">4</div>
+    <div class="step-content">
+      <strong>Nahrajte video</strong><br>
+      Přetáhněte soubor nebo klikněte pro výběr. Můžete nahrát více videí najednou.
+    </div>
+  </div>
+
+  <div class="tip-box">
+    <strong>💡 Tip:</strong> Videa z mobilu jsou obvykle velká. Doporučujeme nahrávat přes WiFi.
+  </div>
+
+  <div class="warning-box">
+    <strong>⚠️ Limit:</strong> Maximální velikost jednoho videa je 500 MB. Delší videa rozdělte na části (1. poločas, 2. poločas).
+  </div>
+
+  <!-- ==================== VIDEO EDITOR ==================== -->
+  <div class="page-break"></div>
+  <h2>3. Video editor - základní ovládání</h2>
+
+  <h3>Rozvržení obrazovky</h3>
+
+  <div class="screen-mockup">
+┌─────────────────────────────────────────────────────────┐
+│  [←]  Název videa ✏️     [🖼️] [🔗 čas] [Shrnutí]      │  ← Hlavička
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│                    VIDEO PŘEHRÁVAČ                      │  ← Video
+│                         ▶️                              │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  NÁSTROJE: [🖱️][✏️][→][○][□][👥] | [⚪⚫🟡🔵] | [●●●] │  ← Panel nástrojů
+│  AKCE: [🎙️ Nahrát] [📷 Screenshot] [🗑️ Smazat]        │
+│  HODNOCENÍ: [⚠️][💡][⭐]  |  KLIP: [🚩 Start]          │
+├─────────────────────────────────────────────────────────┤
+│  ═══●═══════●════●══════●═════●══════════════════════  │  ← Timeline
+│  [⏪] [▶️] [⏩]     2:34 / 12:34     [1x] [🔊]          │  ← Ovládání
+└─────────────────────────────────────────────────────────┘
+  </div>
+
+  <h3>Ovládání videa</h3>
+  <table>
+    <tr>
+      <th>Tlačítko</th>
+      <th>Funkce</th>
+    </tr>
+    <tr>
+      <td>▶️ / ⏸️</td>
+      <td>Přehrát / Pozastavit video</td>
+    </tr>
+    <tr>
+      <td>⏪ / ⏩</td>
+      <td>Skok o 5 sekund zpět / vpřed</td>
+    </tr>
+    <tr>
+      <td>Posuvník</td>
+      <td>Přesun na konkrétní čas</td>
+    </tr>
+    <tr>
+      <td>1x / 0.5x / 2x</td>
+      <td>Rychlost přehrávání (zpomalení pro analýzu)</td>
+    </tr>
+    <tr>
+      <td>🔊</td>
+      <td>Ztlumit/zapnout zvuk</td>
+    </tr>
+  </table>
+
+  <h3>Tlačítka v hlavičce</h3>
+  <table>
+    <tr>
+      <th>Tlačítko</th>
+      <th>Funkce</th>
+    </tr>
+    <tr>
+      <td>✏️ u názvu</td>
+      <td>Přejmenovat video</td>
+    </tr>
+    <tr>
+      <td>🖼️</td>
+      <td>Vybrat náhledový obrázek ze screenshotů</td>
+    </tr>
+    <tr>
+      <td>🔗 čas</td>
+      <td>Sdílet odkaz na video od aktuálního času</td>
+    </tr>
+    <tr>
+      <td>Shrnutí</td>
+      <td>Sdílet textové shrnutí všech komentářů</td>
+    </tr>
+  </table>
+
+  <!-- ==================== KRESLENÍ ==================== -->
+  <div class="page-break"></div>
+  <h2>4. Kreslení na video</h2>
+
+  <p>Kreslení umožňuje vizuálně označit situace přímo na videu. Kresby se zobrazují po dobu 5 sekund.</p>
+
+  <h3>Nástroje kreslení</h3>
+  <table>
+    <tr>
+      <th>Nástroj</th>
+      <th>Ikona</th>
+      <th>Použití</th>
+    </tr>
+    <tr>
+      <td>Výběr</td>
+      <td>🖱️</td>
+      <td>Normální ovládání videa (výchozí)</td>
+    </tr>
+    <tr>
+      <td>Tužka</td>
+      <td>✏️</td>
+      <td>Volné kreslení - zakroužkování, podtržení</td>
+    </tr>
+    <tr>
+      <td>Šipka</td>
+      <td>→</td>
+      <td>Nakreslení šipky (směr pohybu, přihrávka)</td>
+    </tr>
+    <tr>
+      <td>Kruh</td>
+      <td>○</td>
+      <td>Označení prostoru nebo hráče kruhem</td>
+    </tr>
+    <tr>
+      <td>Obdélník</td>
+      <td>□</td>
+      <td>Označení oblasti</td>
+    </tr>
+    <tr>
+      <td>Hráč</td>
+      <td>👥</td>
+      <td>Značka s číslem hráče</td>
+    </tr>
+  </table>
+
+  <h3>Barvy a tloušťka</h3>
+  <p>K dispozici jsou 4 barvy:</p>
+  <ul>
+    <li><span class="color-dot" style="background: white; border: 1px solid #ccc;"></span><strong>Bílá</strong> - výchozí, dobře viditelná na tmavém pozadí</li>
+    <li><span class="color-dot" style="background: black;"></span><strong>Černá</strong> - pro světlé scény</li>
+    <li><span class="color-dot yellow"></span><strong>Žlutá</strong> - výrazná, upoutá pozornost</li>
+    <li><span class="color-dot blue"></span><strong>Modrá</strong> - pro označení taktiky</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>💡 Tip:</strong> Při kreslení se video automaticky pozastaví. Po dokončení kresby přepněte zpět na nástroj "Výběr" pro normální ovládání.
+  </div>
+
+  <h3>Značka hráče</h3>
+  <p>Nástroj "Hráč" umožňuje umístit na video značku s číslem hráče:</p>
+  <ol>
+    <li>Vyberte nástroj 👥</li>
+    <li>Klikněte na místo ve videu</li>
+    <li>Vyberte hráče ze seznamu</li>
+    <li>Značka se zobrazí po dobu 10 sekund</li>
+  </ol>
+
+  <!-- ==================== HLASOVÉ KOMENTÁŘE ==================== -->
+  <div class="page-break"></div>
+  <h2>5. Hlasové komentáře</h2>
+
+  <p>Hlasové komentáře jsou nejrychlejší způsob, jak okomentovat situaci. Aplikace automaticky převádí řeč na text.</p>
+
+  <h3>Jak nahrát komentář</h3>
+
+  <div class="step">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <strong>Pozastavte video</strong> na místě, které chcete okomentovat
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <strong>Klikněte na "🎙️ Nahrát"</strong><br>
+      Tlačítko zčervená a začne nahrávání
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <strong>Mluvte</strong><br>
+      Pod nástrojovou lištou uvidíte živý přepis toho, co říkáte
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number">4</div>
+    <div class="step-content">
+      <strong>Klikněte znovu</strong> pro ukončení nahrávání<br>
+      Komentář se automaticky uloží
+    </div>
+  </div>
+
+  <h3>Interpunkce hlasem</h3>
+  <p>Můžete diktovat interpunkci:</p>
+  <table>
+    <tr>
+      <th>Řeknete</th>
+      <th>Napíše se</th>
+    </tr>
+    <tr><td>"tečka"</td><td>.</td></tr>
+    <tr><td>"čárka"</td><td>,</td></tr>
+    <tr><td>"vykřičník"</td><td>!</td></tr>
+    <tr><td>"otazník"</td><td>?</td></tr>
+    <tr><td>"dvojtečka"</td><td>:</td></tr>
+    <tr><td>"nový řádek"</td><td>(nový řádek)</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>💡 Příklad:</strong> "Honza měl přihrát místo střely tečka Petr byl úplně volný vykřičník"<br>
+    → "Honza měl přihrát místo střely. Petr byl úplně volný!"
+  </div>
+
+  <!-- ==================== HODNOCENÍ ==================== -->
+  <div class="page-break"></div>
+  <h2>6. Hodnocení hráčů</h2>
+
+  <p>Hodnocení umožňuje rychle označit důležité momenty barevnými značkami a přiřadit je konkrétním hráčům.</p>
+
+  <h3>Typy hodnocení</h3>
+  <table>
+    <tr>
+      <th>Ikona</th>
+      <th>Barva</th>
+      <th>Význam</th>
+      <th>Použití</th>
+    </tr>
+    <tr>
+      <td>⚠️</td>
+      <td><span class="color-dot red"></span>Červená</td>
+      <td>Problém</td>
+      <td>Co je třeba zlepšit, chyba</td>
+    </tr>
+    <tr>
+      <td>💡</td>
+      <td><span class="color-dot orange"></span>Oranžová</td>
+      <td>Zajímavé</td>
+      <td>K diskuzi, nejednoznačná situace</td>
+    </tr>
+    <tr>
+      <td>⭐</td>
+      <td><span class="color-dot green"></span>Zelená</td>
+      <td>Pochvala</td>
+      <td>Skvělá akce, správné rozhodnutí</td>
+    </tr>
+  </table>
+
+  <h3>Jak přidat hodnocení</h3>
+  <ol>
+    <li>Pozastavte video na důležitém místě</li>
+    <li>Klikněte na příslušné tlačítko (⚠️, 💡 nebo ⭐)</li>
+    <li>Vyberte hráče (nebo "Bez hráče" pro obecné hodnocení)</li>
+    <li>Hodnocení se uloží a zobrazí na timeline</li>
+  </ol>
+
+  <h3>Timeline značky</h3>
+  <p>Na časové ose videa se zobrazují barevné tečky:</p>
+  <ul>
+    <li><span class="color-dot green"></span>Zelená - textový komentář</li>
+    <li><span class="color-dot orange"></span>Oranžová - screenshot</li>
+    <li><span class="color-dot purple"></span>Fialová - hlasový komentář</li>
+    <li><span class="color-dot red"></span>Červená - problém (hodnocení)</li>
+  </ul>
+  <p>Kliknutím na značku přeskočíte na daný čas.</p>
+
+  <!-- ==================== SCREENSHOTY ==================== -->
+  <div class="page-break"></div>
+  <h2>7. Screenshoty a sdílení</h2>
+
+  <h3>Pořízení screenshotu</h3>
+  <ol>
+    <li>Pozastavte video na důležitém místě</li>
+    <li>Volitelně: nakreslete na video šipky nebo značky</li>
+    <li>Klikněte na "📷 Screenshot"</li>
+    <li>Screenshot se uloží včetně všech kreseb</li>
+  </ol>
+
+  <div class="tip-box">
+    <strong>💡 Tip:</strong> První screenshot se automaticky nastaví jako náhled videa. Můžete to změnit tlačítkem 🖼️ v hlavičce.
+  </div>
+
+  <h3>Sdílení screenshotu</h3>
+  <p>U každého screenshotu jsou tlačítka:</p>
+  <ul>
+    <li><strong>🔗 Sdílet</strong> - stáhne obrázek, který můžete poslat přes WhatsApp, email...</li>
+    <li><strong>× Smazat</strong> - odstraní screenshot</li>
+  </ul>
+
+  <h3>Sdílení odkazu na video</h3>
+  <p>Tlačítko "🔗 čas" v hlavičce zkopíruje odkaz na video od aktuálního času. Příjemce se dostane přímo na správné místo.</p>
+
+  <h3>Sdílení shrnutí</h3>
+  <p>Tlačítko "Shrnutí" vygeneruje textový přehled všech komentářů, hodnocení a screenshotů, který můžete sdílet:</p>
+
+  <div class="screen-mockup" style="background: #f3f4f6; color: #1f2937;">
+📹 Slatina vs Prace 1:6
+📅 31.1.2026
+
+💬 KOMENTÁŘE:
+  [2:34] Pozice obránců je příliš vysoko
+  [5:12] Skvělá kombinace přes střed!
+
+🎙️ HLASOVÉ KOMENTÁŘE:
+  [3:45] "Honza měl přihrát místo střely"
+
+📸 SCREENSHOTY: 3 momentek
+  [2:34] [5:12] [8:45]
+
+---
+Vytvořeno v Slatina Video Analysis
+  </div>
+
+  <!-- ==================== HISTORIE ZÁPASŮ ==================== -->
+  <div class="page-break"></div>
+  <h2>8. Historie zápasů</h2>
+
+  <p>Stránka "Zápasy" zobrazuje přehled všech zápasů se statistikami.</p>
+
+  <h3>Co vidíte na stránce</h3>
+  <ul>
+    <li><strong>Statistiky</strong> - počet výher/remíz/proher, celkové skóre</li>
+    <li><strong>Seznam zápasů</strong> - seřazený od nejnovějšího</li>
+    <li><strong>Barevné označení</strong> - zelená=výhra, žlutá=remíza, červená=prohra</li>
+    <li><strong>Počet videí</strong> - badge ukazující kolik videí patří k zápasu</li>
+  </ul>
+
+  <h3>Filtrování</h3>
+  <p>Můžete filtrovat podle:</p>
+  <ul>
+    <li><strong>Výsledku</strong> - Vše / Výhry / Remízy / Prohry</li>
+    <li><strong>Soupeře</strong> - výběr z dropdown menu</li>
+  </ul>
+
+  <h3>Videa u zápasu</h3>
+  <p>Kliknutím na zápas se rozbalí seznam videí, která k němu patří. Můžete přímo kliknout na video pro analýzu.</p>
+
+  <div class="feature-box">
+    <strong>Videa bez zápasu:</strong> Pokud jste nahráli video bez vyplnění zápasových informací, zobrazí se v sekci "Videa bez přiřazeného zápasu" na konci stránky.
+  </div>
+
+  <!-- ==================== TIPY ==================== -->
+  <div class="page-break"></div>
+  <h2>9. Tipy a triky</h2>
+
+  <h3>Efektivní workflow</h3>
+  <ol>
+    <li><strong>Nahrajte video</strong> co nejdříve po zápase (dokud si pamatujete detaily)</li>
+    <li><strong>První průchod</strong> - sledujte video a přidávejte rychlá hodnocení (⚠️💡⭐)</li>
+    <li><strong>Druhý průchod</strong> - u důležitých momentů přidejte hlasové komentáře a screenshoty</li>
+    <li><strong>Sdílejte</strong> - pošlete shrnutí rodičům nebo přímo hráčům</li>
+  </ol>
+
+  <h3>Doporučení pro nahrávání videí</h3>
+  <ul>
+    <li>Nahrávejte vždy přes <strong>WiFi</strong> (data z mobilu jsou drahá a pomalá)</li>
+    <li>Rozdělte dlouhá videa na <strong>poločasy</strong></li>
+    <li>Vyplňte <strong>informace o zápase</strong> - usnadní to pozdější vyhledávání</li>
+  </ul>
+
+  <h3>Přehrávání</h3>
+  <ul>
+    <li>Použijte <strong>0.5x rychlost</strong> pro detailní analýzu situací</li>
+    <li>Klikejte na <strong>značky na timeline</strong> pro rychlý skok</li>
+    <li>Používejte <strong>⏪⏩</strong> pro malé posuny</li>
+  </ul>
+
+  <h3>Kreslení</h3>
+  <ul>
+    <li><strong>Šipky</strong> jsou nejužitečnější pro znázornění pohybu</li>
+    <li><strong>Kruhy</strong> pro označení prostoru nebo hráče</li>
+    <li>Po kreslení <strong>přepněte zpět na Výběr</strong> (🖱️)</li>
+  </ul>
+
+  <h3>Sdílení s rodiči</h3>
+  <ul>
+    <li>Screenshoty fungují dobře ve <strong>WhatsApp skupině</strong></li>
+    <li>Shrnutí můžete poslat <strong>emailem</strong></li>
+    <li>Odkaz s časem umožňuje <strong>přímý přístup</strong> k momentu</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>💡 Pro rodiče:</strong> Sdílejte především pochvaly (⭐) - motivují víc než kritika!
+  </div>
+
+  <footer>
+    <p><strong>SK Slatina 2017 - Videoanalýza</strong></p>
+    <p>https://skslatina.fun</p>
+    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: Únor 2026</p>
+  </footer>
+
+</body>
+</html>
