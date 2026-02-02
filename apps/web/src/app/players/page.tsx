@@ -14,10 +14,10 @@ import {
   Edit2,
 } from 'lucide-react';
 import {
-  getPlayers as getPlayersCloud,
+  getPlayers,
   Player,
-} from '@/lib/cloud-store';
-import { getTeam } from '@/lib/team-store';
+  getTeam,
+} from '@/lib/team-store';
 
 // Simplified stats for now - will be computed from cloud data
 interface PlayerStats {
@@ -35,9 +35,9 @@ export default function PlayersPage() {
   const team = typeof window !== 'undefined' ? getTeam() : null;
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadData = () => {
       try {
-        const playerList = await getPlayersCloud();
+        const playerList = getPlayers();
         setPlayers(playerList);
 
         // Initialize empty stats for now - can be enhanced later
@@ -171,9 +171,9 @@ export default function PlayersPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {player.photo_url ? (
+                  {player.photoUrl ? (
                     <img
-                      src={player.photo_url}
+                      src={player.photoUrl}
                       alt={player.name}
                       style={{
                         width: 48,

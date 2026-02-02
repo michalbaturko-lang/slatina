@@ -198,6 +198,10 @@ export default function MatchesPage() {
     const goalsFor = parseInt(scoreHome) || 0;
     const goalsAgainst = parseInt(scoreAway) || 0;
 
+    // Capture orphan video IDs at the start to avoid closure issues
+    const orphanVideoIds = new Set(orphanedVideos.map(v => v.id));
+    const orphanCount = orphanedVideos.length;
+
     // Build match name with tournament prefix if applicable
     const matchName = isTournament && tournament
       ? `${tournament}: Slatina vs ${opponent}`
@@ -212,7 +216,7 @@ export default function MatchesPage() {
         opponent_id: null,
         goals_for: goalsFor,
         goals_against: goalsAgainst,
-        notes: `Automaticky vytvořeno z ${orphanedVideos.length} videí`,
+        notes: `Automaticky vytvořeno z ${orphanCount} videí`,
       });
 
       // Update video titles to include tournament prefix if applicable
@@ -229,20 +233,14 @@ export default function MatchesPage() {
         })
       );
 
-      // Update local state
-      setMatches(prev => [newMatch, ...prev]);
-      setVideos(prev => prev.map(v => {
-        const orphan = orphanedVideos.find(ov => ov.id === v.id);
-        if (orphan) {
-          const newTitle = isTournament && tournament && !v.title.startsWith(tournament)
-            ? `${videoTitlePrefix}${v.title}`
-            : v.title;
-          return { ...v, match_id: newMatch.id, title: newTitle };
-        }
-        return v;
-      }));
+      // Reload videos from database to ensure consistency
+      const freshVideos = await getVideos();
+      setVideos(freshVideos);
 
-      alert(`Vytvořen zápas "${matchName}" s ${orphanedVideos.length} videi!`);
+      // Update matches state
+      setMatches(prev => [newMatch, ...prev.filter(m => m.id !== newMatch.id)]);
+
+      alert(`Vytvořen zápas "${matchName}" s ${orphanCount} videi!`);
     } catch (err) {
       console.error('Failed to create match from orphans:', err);
       alert('Nepodařilo se vytvořit zápas');
