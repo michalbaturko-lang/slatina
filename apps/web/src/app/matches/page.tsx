@@ -19,6 +19,7 @@ import {
   UserPlus,
   X,
   Check,
+  Trash2,
 } from 'lucide-react';
 import {
   getMatches,
@@ -29,6 +30,7 @@ import {
   removePlayerFromMatch,
   createMatch,
   updateVideo,
+  deleteMatch,
   Match,
   Video,
   Player,
@@ -200,6 +202,35 @@ export default function MatchesPage() {
       alert('Nepodařilo se vytvořit zápas');
     } finally {
       setCreatingMatchFromOrphans(false);
+    }
+  };
+
+  // Delete a match
+  const handleDeleteMatch = async (matchId: string, matchName: string) => {
+    if (!confirm(`Opravdu smazat zápas "${matchName}"?\n\nVidea přiřazená k tomuto zápasu zůstanou, ale budou bez přiřazení.`)) {
+      return;
+    }
+
+    try {
+      // First, unlink all videos from this match
+      const matchVideos = videos.filter(v => v.match_id === matchId);
+      await Promise.all(
+        matchVideos.map(video => updateVideo(video.id, { match_id: null }))
+      );
+
+      // Delete the match
+      await deleteMatch(matchId);
+
+      // Update local state
+      setMatches(prev => prev.filter(m => m.id !== matchId));
+      setVideos(prev => prev.map(v =>
+        v.match_id === matchId ? { ...v, match_id: null } : v
+      ));
+
+      alert('Zápas smazán');
+    } catch (err) {
+      console.error('Failed to delete match:', err);
+      alert('Nepodařilo se smazat zápas');
     }
   };
 
@@ -779,6 +810,28 @@ export default function MatchesPage() {
                           K tomuto zápasu nejsou přiřazena žádná videa
                         </p>
                       )}
+
+                      {/* Delete match button */}
+                      <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #374151' }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteMatch(match.id, match.name); }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 12px',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #ef4444',
+                            borderRadius: 6,
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          Smazat zápas
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

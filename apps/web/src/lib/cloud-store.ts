@@ -450,6 +450,22 @@ export async function createMatch(match: Omit<Match, 'id' | 'created_at' | 'upda
   return data;
 }
 
+export async function deleteMatch(id: string): Promise<void> {
+  if (!isProductionMode()) {
+    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
+    const filtered = matches.filter((m: Match) => m.id !== id);
+    localStorage.setItem('slatina-matches', JSON.stringify(filtered));
+    return;
+  }
+
+  const { error } = await supabase
+    .from('matches')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
 // ============================================
 // PLAYER PHOTOS
 // ============================================

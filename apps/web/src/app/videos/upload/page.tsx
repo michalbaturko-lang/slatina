@@ -61,7 +61,7 @@ export default function UploadPage() {
     if (videoType === 'match' && opponent) {
       const baseTitle = scoreHome !== '' && scoreAway !== ''
         ? `Slatina-${opponent} ${scoreHome}:${scoreAway}`
-        : `vs. ${opponent}`;
+        : `Slatina vs ${opponent}`;
 
       if (total === 1) {
         return baseTitle;
