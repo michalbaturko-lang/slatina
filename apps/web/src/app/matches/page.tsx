@@ -51,6 +51,15 @@ export default function MatchesPage() {
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const [showPlayerSelector, setShowPlayerSelector] = useState<string | null>(null);
   const [creatingMatchFromOrphans, setCreatingMatchFromOrphans] = useState(false);
+  const [showOrphanMatchModal, setShowOrphanMatchModal] = useState(false);
+  const [orphanMatchData, setOrphanMatchData] = useState({
+    opponent: '',
+    scoreHome: '',
+    scoreAway: '',
+    date: '',
+    tournament: '',
+    isTournament: false,
+  });
 
   useEffect(() => {
     const loadData = async () => {
@@ -139,62 +148,99 @@ export default function MatchesPage() {
     return videos.filter(v => !v.match_id);
   }, [videos]);
 
-  // Create match from orphan videos and assign them
-  const createMatchFromOrphans = async () => {
+  // Show modal to create match from orphan videos
+  const openOrphanMatchModal = () => {
     if (orphanedVideos.length === 0) return;
-
-    setCreatingMatchFromOrphans(true);
 
     // Try to extract match info from video titles
     const firstTitle = orphanedVideos[0].title;
-    // Pattern: "Slatina-Opponent Score" or "vs. Opponent"
-    const matchPattern = /Slatina[- ]+([\w]+)\s*(\d+:\d+)?/i;
-    const vsPattern = /vs\.\s*([\w]+)/i;
+    // Pattern: "Slatina-Opponent Score" or "vs. Opponent" or "vs Opponent"
+    const matchPattern = /Slatina[- ]+([\w]+)\s*(\d+):(\d+)?/i;
+    const vsPattern = /vs\.?\s*([\w]+)/i;
 
-    let matchName = 'Zápas';
-    let goalsFor = 0;
-    let goalsAgainst = 0;
+    let opponent = '';
+    let scoreHome = '';
+    let scoreAway = '';
 
     const match1 = firstTitle.match(matchPattern);
     const match2 = firstTitle.match(vsPattern);
 
     if (match1) {
-      matchName = `Slatina vs ${match1[1]}`;
-      if (match1[2]) {
-        const [home, away] = match1[2].split(':').map(Number);
-        goalsFor = home || 0;
-        goalsAgainst = away || 0;
-      }
+      opponent = match1[1];
+      scoreHome = match1[2] || '';
+      scoreAway = match1[3] || '';
     } else if (match2) {
-      matchName = `Slatina vs ${match2[1]}`;
+      opponent = match2[1];
     }
+
+    // Extract date from first video
+    const videoDate = orphanedVideos[0].created_at.split('T')[0];
+
+    setOrphanMatchData({
+      opponent,
+      scoreHome,
+      scoreAway,
+      date: videoDate,
+      tournament: '',
+      isTournament: false,
+    });
+    setShowOrphanMatchModal(true);
+  };
+
+  // Confirm and create match from orphan videos
+  const confirmCreateMatchFromOrphans = async () => {
+    if (orphanedVideos.length === 0) return;
+
+    setCreatingMatchFromOrphans(true);
+    setShowOrphanMatchModal(false);
+
+    const { opponent, scoreHome, scoreAway, date, tournament, isTournament } = orphanMatchData;
+    const goalsFor = parseInt(scoreHome) || 0;
+    const goalsAgainst = parseInt(scoreAway) || 0;
+
+    // Build match name with tournament prefix if applicable
+    const matchName = isTournament && tournament
+      ? `${tournament}: Slatina vs ${opponent}`
+      : `Slatina vs ${opponent}`;
 
     try {
       // Create the match
       const newMatch = await createMatch({
         name: matchName,
-        date: orphanedVideos[0].created_at.split('T')[0],
-        type: 'match',
+        date: date || new Date().toISOString().split('T')[0],
+        type: isTournament ? 'tournament' : 'match',
         opponent_id: null,
         goals_for: goalsFor,
         goals_against: goalsAgainst,
         notes: `Automaticky vytvořeno z ${orphanedVideos.length} videí`,
       });
 
-      // Assign all orphan videos to this match
+      // Update video titles to include tournament prefix if applicable
+      const videoTitlePrefix = isTournament && tournament ? `${tournament}: ` : '';
+
+      // Assign all orphan videos to this match and update their titles
       await Promise.all(
-        orphanedVideos.map(video =>
-          updateVideo(video.id, { match_id: newMatch.id })
-        )
+        orphanedVideos.map(video => {
+          // Only add prefix if it's a tournament and title doesn't already have it
+          const newTitle = isTournament && tournament && !video.title.startsWith(tournament)
+            ? `${videoTitlePrefix}${video.title}`
+            : video.title;
+          return updateVideo(video.id, { match_id: newMatch.id, title: newTitle });
+        })
       );
 
       // Update local state
       setMatches(prev => [newMatch, ...prev]);
-      setVideos(prev => prev.map(v =>
-        orphanedVideos.find(ov => ov.id === v.id)
-          ? { ...v, match_id: newMatch.id }
-          : v
-      ));
+      setVideos(prev => prev.map(v => {
+        const orphan = orphanedVideos.find(ov => ov.id === v.id);
+        if (orphan) {
+          const newTitle = isTournament && tournament && !v.title.startsWith(tournament)
+            ? `${videoTitlePrefix}${v.title}`
+            : v.title;
+          return { ...v, match_id: newMatch.id, title: newTitle };
+        }
+        return v;
+      }));
 
       alert(`Vytvořen zápas "${matchName}" s ${orphanedVideos.length} videi!`);
     } catch (err) {
@@ -853,7 +899,7 @@ export default function MatchesPage() {
                     Videa bez přiřazeného zápasu ({orphanedVideos.length})
                   </h3>
                   <button
-                    onClick={createMatchFromOrphans}
+                    onClick={openOrphanMatchModal}
                     disabled={creatingMatchFromOrphans}
                     style={{
                       display: 'flex',
@@ -937,6 +983,229 @@ export default function MatchesPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Orphan Match Creation Modal */}
+        {showOrphanMatchModal && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16,
+          }}>
+            <div style={{
+              backgroundColor: '#1f2937',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 400,
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <h3 style={{ fontSize: 18, fontWeight: 600 }}>Vytvořit zápas</h3>
+                <button
+                  onClick={() => setShowOrphanMatchModal(false)}
+                  style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 4 }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 20 }}>
+                Přiřadit {orphanedVideos.length} videí k novému zápasu
+              </p>
+
+              {/* Tournament toggle */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={orphanMatchData.isTournament}
+                    onChange={(e) => setOrphanMatchData(prev => ({ ...prev, isTournament: e.target.checked }))}
+                    style={{ width: 18, height: 18 }}
+                  />
+                  <span style={{ fontSize: 14 }}>Zápas v rámci turnaje</span>
+                </label>
+              </div>
+
+              {/* Tournament name */}
+              {orphanMatchData.isTournament && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>
+                    Název turnaje
+                  </label>
+                  <input
+                    type="text"
+                    value={orphanMatchData.tournament}
+                    onChange={(e) => setOrphanMatchData(prev => ({ ...prev, tournament: e.target.value }))}
+                    placeholder="např. Křenovice"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      backgroundColor: '#374151',
+                      border: '1px solid #4b5563',
+                      borderRadius: 8,
+                      color: 'white',
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Opponent */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>
+                  Soupeř
+                </label>
+                <input
+                  type="text"
+                  value={orphanMatchData.opponent}
+                  onChange={(e) => setOrphanMatchData(prev => ({ ...prev, opponent: e.target.value }))}
+                  placeholder="např. Ratíškovice"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: '#374151',
+                    border: '1px solid #4b5563',
+                    borderRadius: 8,
+                    color: 'white',
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+
+              {/* Score */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>
+                  Skóre
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="number"
+                    value={orphanMatchData.scoreHome}
+                    onChange={(e) => setOrphanMatchData(prev => ({ ...prev, scoreHome: e.target.value }))}
+                    placeholder="Slatina"
+                    min="0"
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      backgroundColor: '#374151',
+                      border: '1px solid #4b5563',
+                      borderRadius: 8,
+                      color: 'white',
+                      fontSize: 14,
+                      textAlign: 'center',
+                    }}
+                  />
+                  <span style={{ fontWeight: 600 }}>:</span>
+                  <input
+                    type="number"
+                    value={orphanMatchData.scoreAway}
+                    onChange={(e) => setOrphanMatchData(prev => ({ ...prev, scoreAway: e.target.value }))}
+                    placeholder="Soupeř"
+                    min="0"
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      backgroundColor: '#374151',
+                      border: '1px solid #4b5563',
+                      borderRadius: 8,
+                      color: 'white',
+                      fontSize: 14,
+                      textAlign: 'center',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Date */}
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>
+                  Datum zápasu
+                </label>
+                <input
+                  type="date"
+                  value={orphanMatchData.date}
+                  onChange={(e) => setOrphanMatchData(prev => ({ ...prev, date: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    backgroundColor: '#374151',
+                    border: '1px solid #4b5563',
+                    borderRadius: 8,
+                    color: 'white',
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+
+              {/* Preview */}
+              <div style={{
+                backgroundColor: '#111827',
+                padding: 12,
+                borderRadius: 8,
+                marginBottom: 20,
+              }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Náhled názvu zápasu:</div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>
+                  {orphanMatchData.isTournament && orphanMatchData.tournament
+                    ? `${orphanMatchData.tournament}: Slatina vs ${orphanMatchData.opponent || '?'}`
+                    : `Slatina vs ${orphanMatchData.opponent || '?'}`}
+                  {orphanMatchData.scoreHome && orphanMatchData.scoreAway && (
+                    <span style={{ marginLeft: 8, color: '#9ca3af' }}>
+                      ({orphanMatchData.scoreHome}:{orphanMatchData.scoreAway})
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  onClick={() => setShowOrphanMatchModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    backgroundColor: '#374151',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: 'white',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Zrušit
+                </button>
+                <button
+                  onClick={confirmCreateMatchFromOrphans}
+                  disabled={!orphanMatchData.opponent}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    backgroundColor: orphanMatchData.opponent ? '#22c55e' : '#4b5563',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: 'white',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: orphanMatchData.opponent ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Vytvořit zápas
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

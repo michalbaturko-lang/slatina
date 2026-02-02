@@ -171,9 +171,9 @@ export default function PlayersPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {player.photoUrl ? (
+                  {player.photo_url ? (
                     <img
-                      src={player.photoUrl}
+                      src={player.photo_url}
                       alt={player.name}
                       style={{
                         width: 48,

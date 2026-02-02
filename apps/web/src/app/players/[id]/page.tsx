@@ -37,11 +37,13 @@ import {
   deletePlayerClip as deletePlayerClipCloud,
   getMatches as getMatchesCloud,
   getGoals as getGoalsCloud,
+  getVideos as getVideosCloud,
   Player,
   Match,
   Goal,
   PlayerPhoto,
   PlayerClip,
+  Video as VideoType,
 } from '@/lib/cloud-store';
 import { uploadDataUrl } from '@/lib/upload';
 
@@ -299,6 +301,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
   const [photos, setPhotos] = useState<PlayerPhoto[]>([]);
   const [clips, setClips] = useState<PlayerClip[]>([]);
   const [allMatches, setAllMatches] = useState<Match[]>([]);
+  const [allVideos, setAllVideos] = useState<VideoType[]>([]);
   const [activeTab, setActiveTab] = useState<'matches' | 'goals' | 'comments' | 'gallery' | 'clips'>('matches');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -333,16 +336,18 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           setPlayer(p);
 
           // Load all data in parallel
-          const [photosData, clipsData, matchesData, goalsData] = await Promise.all([
+          const [photosData, clipsData, matchesData, goalsData, videosData] = await Promise.all([
             getPlayerPhotosCloud(p.id),
             getPlayerClipsCloud(p.id),
             getMatchesCloud(),
             getGoalsCloud(),
+            getVideosCloud(),
           ]);
 
           setPhotos(photosData);
           setClips(clipsData);
           setAllMatches(matchesData);
+          setAllVideos(videosData);
 
           // Filter goals for this player
           const playerGoals = goalsData.filter(g => g.scorer_id === p.id);
@@ -368,6 +373,11 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     };
     loadData();
   }, [params.id]);
+
+  // Helper to get video by ID
+  const getVideo = (videoId: string) => {
+    return allVideos.find(v => v.id === videoId);
+  };
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -966,31 +976,19 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontWeight: 500 }}>{match.name}</div>
-                      {match.opponent && (
-                        <div style={{ fontSize: 14, color: '#9ca3af' }}>vs. {match.opponent}</div>
-                      )}
                     </div>
-                    {match.result && (
-                      <div style={{
-                        fontSize: 18,
-                        fontWeight: 700,
-                        color: match.result.goalsFor > match.result.goalsAgainst ? '#22c55e' :
-                               match.result.goalsFor < match.result.goalsAgainst ? '#ef4444' : '#9ca3af',
-                      }}>
-                        {match.result.goalsFor}:{match.result.goalsAgainst}
-                      </div>
-                    )}
+                    <div style={{
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: match.goals_for > match.goals_against ? '#22c55e' :
+                             match.goals_for < match.goals_against ? '#ef4444' : '#9ca3af',
+                    }}>
+                      {match.goals_for}:{match.goals_against}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: '#6b7280' }}>
                     <Calendar size={14} />
                     {new Date(match.date).toLocaleDateString('cs-CZ')}
-                    {match.videoIds.length > 0 && (
-                      <>
-                        <span>•</span>
-                        <Video size={14} />
-                        {match.videoIds.length} video
-                      </>
-                    )}
                   </div>
                 </div>
               ))
@@ -1004,7 +1002,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
               </p>
             ) : (
               goals.map(goal => {
-                const match = matches.find(m => m.id === goal.matchId);
+                const match = matches.find(m => m.id === goal.match_id);
                 return (
                   <div
                     key={goal.id}
@@ -1025,9 +1023,9 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                         {goal.minute && ` • ${goal.minute}'`}
                       </div>
                     </div>
-                    {goal.videoId && (
+                    {goal.video_id && (
                       <Link
-                        href={`/videos/${goal.videoId}${goal.videoTime ? `?t=${goal.videoTime}` : ''}`}
+                        href={`/videos/${goal.video_id}${goal.video_time ? `?t=${goal.video_time}` : ''}`}
                         style={{
                           padding: '6px 12px',
                           backgroundColor: '#374151',
@@ -1122,7 +1120,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                   gap: 8,
                 }}>
                   {photos.map(photo => {
-                    const match = allMatches.find(m => m.id === photo.matchId);
+                    const match = allMatches.find(m => m.id === photo.match_id);
                     return (
                       <div
                         key={photo.id}
@@ -1136,7 +1134,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                         onClick={() => setViewingPhoto(photo)}
                       >
                         <img
-                          src={photo.photoUrl}
+                          src={photo.photo_url}
                           alt={photo.caption || 'Fotka'}
                           style={{
                             width: '100%',
@@ -1156,7 +1154,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                             color: 'white',
                             textAlign: 'center',
                           }}>
-                            {match.opponent || match.name}
+                            {match.name}
                           </div>
                         )}
                       </div>
@@ -1179,7 +1177,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                 </div>
               ) : (
                 clips.map(clip => {
-                  const video = getVideo(clip.videoId);
+                  const video = getVideo(clip.video_id);
                   const categoryColors: Record<string, string> = {
                     goal: '#22c55e',
                     assist: '#60a5fa',
@@ -1230,11 +1228,11 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                           }}>
                             {categoryLabels[clip.category]}
                           </span>
-                          <span>{formatTime(clip.startTime)} - {formatTime(clip.endTime)}</span>
+                          <span>{formatTime(clip.start_time)} - {formatTime(clip.end_time)}</span>
                         </div>
                       </div>
                       <Link
-                        href={`/videos/${clip.videoId}?t=${clip.startTime}`}
+                        href={`/videos/${clip.video_id}?t=${clip.start_time}`}
                         style={{
                           padding: '8px 12px',
                           backgroundColor: '#2563eb',
@@ -1356,7 +1354,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
                 <option value="">Vyberte zápas...</option>
                 {allMatches.map(m => (
                   <option key={m.id} value={m.id}>
-                    {m.name} {m.opponent && `vs. ${m.opponent}`}
+                    {m.name}
                   </option>
                 ))}
               </select>
@@ -1421,7 +1419,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           onClick={() => setViewingPhoto(null)}
         >
           <img
-            src={viewingPhoto.photoUrl}
+            src={viewingPhoto.photo_url}
             alt={viewingPhoto.caption || 'Fotka'}
             style={{
               maxWidth: '100%',
