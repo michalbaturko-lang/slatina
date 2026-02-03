@@ -431,6 +431,22 @@ export async function getMatches(): Promise<Match[]> {
   return data || [];
 }
 
+export async function getMatch(id: string): Promise<Match | null> {
+  if (!isProductionMode()) {
+    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
+    return matches.find((m: Match) => m.id === id) || null;
+  }
+
+  const { data, error } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
 export async function createMatch(match: Omit<Match, 'id' | 'created_at' | 'updated_at'>): Promise<Match> {
   if (!isProductionMode()) {
     const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
