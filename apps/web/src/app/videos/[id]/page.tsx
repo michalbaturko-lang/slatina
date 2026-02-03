@@ -271,10 +271,28 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           try {
             const matchData = await getMatch(videoData.match_id);
             setCurrentMatch(matchData);
-            // Get ALL videos from this match and sort by title for consistent ordering
+            // Get ALL videos from this match and sort using natural sort for correct number ordering
+            // "Video 1, Video 2, ... Video 10" instead of "Video 1, Video 10, Video 2"
+            const naturalSort = (a: string, b: string): number => {
+              const aParts = a.split(/(\d+)/);
+              const bParts = b.split(/(\d+)/);
+              for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+                const aPart = aParts[i] || '';
+                const bPart = bParts[i] || '';
+                const aNum = parseInt(aPart, 10);
+                const bNum = parseInt(bPart, 10);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                  if (aNum !== bNum) return aNum - bNum;
+                } else {
+                  const cmp = aPart.localeCompare(bPart, 'cs');
+                  if (cmp !== 0) return cmp;
+                }
+              }
+              return 0;
+            };
             const allMatchVideos = allVideos
               .filter(v => v.match_id === videoData.match_id)
-              .sort((a, b) => a.title.localeCompare(b.title, 'cs'));
+              .sort((a, b) => naturalSort(a.title, b.title));
             setMatchVideos(allMatchVideos);
           } catch (err) {
             console.error('Failed to load match:', err);
