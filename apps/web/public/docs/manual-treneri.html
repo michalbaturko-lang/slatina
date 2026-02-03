@@ -224,6 +224,7 @@
       <li>Screenshoty a sdílení</li>
       <li>Historie zápasů</li>
       <li>Správa hráčů v zápasech</li>
+      <li>Správa videí (NOVINKA v1.3)</li>
       <li>Tipy a triky</li>
       <li>Historie verzí</li>
     </ol>
@@ -701,9 +702,87 @@ Vytvořeno v Slatina Video Analysis
     <strong>💡 Tip:</strong> Přiřazení hráčů k zápasům umožní v budoucnu generovat statistiky - kolik zápasů hráč odehrál, účast na trénincích apod.
   </div>
 
+  <!-- ==================== SPRÁVA VIDEÍ ==================== -->
+  <div class="page-break"></div>
+  <h2>10. Správa videí (NOVINKA v1.3)</h2>
+
+  <p>Stránka "Videa" nabízí přehled všech nahraných videí s možností řazení a filtrování.</p>
+
+  <h3>Řazení videí</h3>
+  <p>V horní části stránky můžete zvolit způsob řazení:</p>
+  <table>
+    <tr>
+      <th>Možnost</th>
+      <th>Popis</th>
+    </tr>
+    <tr>
+      <td><strong>Nejnovější</strong></td>
+      <td>Od nejnovějších (výchozí)</td>
+    </tr>
+    <tr>
+      <td><strong>Nejstarší</strong></td>
+      <td>Od nejstarších</td>
+    </tr>
+    <tr>
+      <td><strong>A-Z</strong></td>
+      <td>Abecedně podle názvu</td>
+    </tr>
+    <tr>
+      <td><strong>Z-A</strong></td>
+      <td>Abecedně pozpátku</td>
+    </tr>
+    <tr>
+      <td><strong>Nejvíce komentářů</strong></td>
+      <td>Videa s nejvíce komentáři nahoře</td>
+    </tr>
+    <tr>
+      <td><strong>Nejdelší</strong></td>
+      <td>Nejdelší videa nahoře</td>
+    </tr>
+  </table>
+
+  <h3>Filtrování podle obsahu</h3>
+  <p>Můžete rychle najít videa, která obsahují analýzu:</p>
+  <ul>
+    <li><strong>Vše</strong> - zobrazí všechna videa</li>
+    <li><strong>S komentáři</strong> - jen videa, která mají alespoň jeden komentář</li>
+    <li><strong>Se screenshoty</strong> - jen videa, ke kterým byl pořízen screenshot</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>💡 Tip:</strong> Použijte filtr "S komentáři" pro rychlý přístup k videím, která jste už analyzovali.
+  </div>
+
+  <h3>Navigace mezi videi ze zápasu</h3>
+  <p>Při sledování videa, které patří k zápasu, máte k dispozici:</p>
+  <ul>
+    <li><strong>Tlačítko zpět</strong> - automaticky vede zpět na stránku zápasu (ne na seznam všech videí)</li>
+    <li><strong>Spodní lišta</strong> - zobrazuje všechna videa ze stejného zápasu pro rychlou navigaci</li>
+    <li><strong>"Zobrazit zápas"</strong> - odkaz vede přímo na daný zápas a automaticky ho rozbalí</li>
+  </ul>
+
+  <div class="screen-mockup">
+┌─────────────────────────────────────────────────────────┐
+│  [←]  Video 3 (ze zápasu Slatina vs Prace)              │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│                    VIDEO PŘEHRÁVAČ                      │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  NÁSTROJE...                                            │
+├─────────────────────────────────────────────────────────┤
+│  Videa ze zápasu (5):                                   │
+│  [1/5] [2/5] [●3/5●] [4/5] [5/5]  ← aktuální zvýrazněno │
+└─────────────────────────────────────────────────────────┘
+  </div>
+
+  <div class="feature-box">
+    <strong>Rychlá navigace:</strong> Kliknutím na číslo ve spodní liště okamžitě přeskočíte na jiné video ze stejného zápasu, aniž byste se museli vracet do seznamu.
+  </div>
+
   <!-- ==================== TIPY ==================== -->
   <div class="page-break"></div>
-  <h2>10. Tipy a triky</h2>
+  <h2>11. Tipy a triky</h2>
 
   <h3>Efektivní workflow</h3>
   <ol>
@@ -747,13 +826,26 @@ Vytvořeno v Slatina Video Analysis
 
   <!-- ==================== HISTORIE VERZÍ ==================== -->
   <div class="page-break"></div>
-  <h2>11. Historie verzí</h2>
+  <h2>12. Historie verzí</h2>
 
   <table>
     <tr>
       <th>Verze</th>
       <th>Datum</th>
       <th>Změny</th>
+    </tr>
+    <tr>
+      <td><strong>v1.3</strong></td>
+      <td>3.2.2026</td>
+      <td>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li><strong>Řazení videí</strong> - možnost řadit podle data, názvu, počtu komentářů nebo délky</li>
+          <li><strong>Filtrování videí</strong> - zobrazit jen videa s komentáři nebo screenshoty</li>
+          <li><strong>Navigace mezi videi</strong> - spodní lišta s dalšími videi ze zápasu</li>
+          <li><strong>Chytré tlačítko zpět</strong> - automaticky vede na stránku zápasu</li>
+          <li><strong>Přímý odkaz na zápas</strong> - "Zobrazit zápas" otevře a rozbalí konkrétní zápas</li>
+        </ul>
+      </td>
     </tr>
     <tr>
       <td><strong>v1.2</strong></td>
@@ -807,7 +899,7 @@ Vytvořeno v Slatina Video Analysis
   <footer>
     <p><strong>SK Slatina 2017 - Videoanalýza</strong></p>
     <p>https://skslatina.fun</p>
-    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: <strong>v1.2</strong> (1.2.2026)</p>
+    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: <strong>v1.3</strong> (3.2.2026)</p>
     <p style="font-size: 11px; color: #9ca3af;">Manuál: https://skslatina.fun/docs/manual-treneri.html</p>
   </footer>
 
