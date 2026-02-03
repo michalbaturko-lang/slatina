@@ -49,6 +49,15 @@ export default function MatchesPage() {
   const [filterResult, setFilterResult] = useState<ResultFilter>('all');
   const [filterOpponent, setFilterOpponent] = useState<string>('all');
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
+
+  // Handle expand query parameter from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const expandParam = params.get('expand');
+    if (expandParam) {
+      setExpandedMatch(expandParam);
+    }
+  }, []);
   const [showPlayerSelector, setShowPlayerSelector] = useState<string | null>(null);
   const [creatingMatchFromOrphans, setCreatingMatchFromOrphans] = useState(false);
   const [showOrphanMatchModal, setShowOrphanMatchModal] = useState(false);

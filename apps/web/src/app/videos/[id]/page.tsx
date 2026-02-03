@@ -271,11 +271,11 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           try {
             const matchData = await getMatch(videoData.match_id);
             setCurrentMatch(matchData);
-            // Get other videos from this match (excluding current)
-            const otherVideos = allVideos.filter(
-              v => v.match_id === videoData.match_id && v.id !== videoData.id
-            );
-            setMatchVideos(otherVideos);
+            // Get ALL videos from this match and sort by title for consistent ordering
+            const allMatchVideos = allVideos
+              .filter(v => v.match_id === videoData.match_id)
+              .sort((a, b) => a.title.localeCompare(b.title, 'cs'));
+            setMatchVideos(allMatchVideos);
           } catch (err) {
             console.error('Failed to load match:', err);
           }
@@ -1812,7 +1812,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       )}
 
       {/* Other Videos from Same Match */}
-      {currentMatch && matchVideos.length > 0 && (
+      {currentMatch && matchVideos.length > 1 && (
         <div style={{
           position: 'fixed',
           bottom: 0,
@@ -1826,10 +1826,10 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           <div style={{ maxWidth: 900, margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <h4 style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500 }}>
-                Další videa ze zápasu ({matchVideos.length})
+                Video {matchVideos.findIndex(v => v.id === video?.id) + 1} z {matchVideos.length}
               </h4>
               <Link
-                href="/matches"
+                href={`/matches?expand=${currentMatch.id}`}
                 style={{ fontSize: 11, color: '#60a5fa', textDecoration: 'none' }}
               >
                 Zobrazit zápas →
@@ -1842,63 +1842,67 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
               paddingBottom: 4,
               scrollbarWidth: 'thin',
             }}>
-              {matchVideos.map((v, idx) => (
-                <Link
-                  key={v.id}
-                  href={`/videos/${v.id}`}
-                  style={{
-                    flexShrink: 0,
-                    width: 120,
-                    backgroundColor: '#1f2937',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    textDecoration: 'none',
-                    color: 'white',
-                  }}
-                >
-                  <div style={{
-                    width: '100%',
-                    aspectRatio: '16/9',
-                    backgroundColor: '#374151',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                  }}>
-                    {v.thumbnail_url ? (
-                      <img
-                        src={v.thumbnail_url}
-                        alt=""
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <PlayCircle size={24} style={{ color: '#6b7280' }} />
-                    )}
-                    <div style={{
-                      position: 'absolute',
-                      top: 4,
-                      left: 4,
-                      backgroundColor: 'rgba(0,0,0,0.7)',
-                      borderRadius: 4,
-                      padding: '2px 6px',
-                      fontSize: 10,
-                      fontWeight: 600,
-                    }}>
-                      {idx + 1}/{matchVideos.length + 1}
-                    </div>
-                  </div>
-                  <div style={{ padding: '6px 8px' }}>
-                    <p style={{
-                      fontSize: 11,
+              {matchVideos.map((v, idx) => {
+                const isCurrent = v.id === video?.id;
+                return (
+                  <Link
+                    key={v.id}
+                    href={`/videos/${v.id}`}
+                    style={{
+                      flexShrink: 0,
+                      width: 120,
+                      backgroundColor: isCurrent ? '#2563eb' : '#1f2937',
+                      borderRadius: 8,
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      textDecoration: 'none',
+                      color: 'white',
+                      border: isCurrent ? '2px solid #60a5fa' : '2px solid transparent',
+                    }}
+                  >
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '16/9',
+                      backgroundColor: '#374151',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
                     }}>
-                      {v.title.replace(currentMatch.name + ': ', '').replace(currentMatch.name.split(':')[0] + ': ', '')}
-                    </p>
-                  </div>
-                </Link>
-              ))}
+                      {v.thumbnail_url ? (
+                        <img
+                          src={v.thumbnail_url}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <PlayCircle size={24} style={{ color: '#6b7280' }} />
+                      )}
+                      <div style={{
+                        position: 'absolute',
+                        top: 4,
+                        left: 4,
+                        backgroundColor: isCurrent ? '#2563eb' : 'rgba(0,0,0,0.7)',
+                        borderRadius: 4,
+                        padding: '2px 6px',
+                        fontSize: 10,
+                        fontWeight: 600,
+                      }}>
+                        {idx + 1}/{matchVideos.length}
+                      </div>
+                    </div>
+                    <div style={{ padding: '6px 8px' }}>
+                      <p style={{
+                        fontSize: 11,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {v.title.replace(currentMatch.name + ': ', '').replace(currentMatch.name.split(':')[0] + ': ', '')}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>

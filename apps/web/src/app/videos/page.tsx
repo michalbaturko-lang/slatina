@@ -17,13 +17,20 @@ import {
   Loader2,
   Users,
   Trophy,
+  ArrowUpDown,
+  MessageSquare,
+  Camera,
+  Filter,
 } from 'lucide-react';
-import { getVideos, deleteVideo, Video, getComments, getAudioComments, getMatches, Match, Comment, AudioComment } from '@/lib/cloud-store';
+import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment } from '@/lib/cloud-store';
 
 interface VideoStats {
   commentCount: number;
   audioCount: number;
+  screenshotCount: number;
 }
+
+type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'comments-desc' | 'duration-desc';
 
 export default function VideosPage() {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -32,6 +39,8 @@ export default function VideosPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMatch, setFilterMatch] = useState<string>('all');
+  const [filterHasContent, setFilterHasContent] = useState<'all' | 'with-comments' | 'with-screenshots'>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
   const [videoStats, setVideoStats] = useState<Record<string, VideoStats>>({});
 
   useEffect(() => {
@@ -51,16 +60,18 @@ export default function VideosPage() {
       const stats: Record<string, VideoStats> = {};
       await Promise.all(storedVideos.map(async (video) => {
         try {
-          const [comments, audioComments] = await Promise.all([
+          const [comments, audioComments, screenshots] = await Promise.all([
             getComments(video.id),
             getAudioComments(video.id),
+            getScreenshots(video.id),
           ]);
           stats[video.id] = {
             commentCount: comments.length,
             audioCount: audioComments.length,
+            screenshotCount: screenshots.length,
           };
         } catch (err) {
-          stats[video.id] = { commentCount: 0, audioCount: 0 };
+          stats[video.id] = { commentCount: 0, audioCount: 0, screenshotCount: 0 };
         }
       }));
       setVideoStats(stats);
@@ -89,13 +100,44 @@ export default function VideosPage() {
     }
   };
 
-  const filteredVideos = videos.filter(video => {
-    const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesMatchFilter = filterMatch === 'all' ||
-      (filterMatch === 'no-match' && !video.match_id) ||
-      video.match_id === filterMatch;
-    return matchesSearch && matchesMatchFilter;
-  });
+  const filteredAndSortedVideos = videos
+    .filter(video => {
+      const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesMatchFilter = filterMatch === 'all' ||
+        (filterMatch === 'no-match' && !video.match_id) ||
+        video.match_id === filterMatch;
+
+      // Content filter
+      const stats = videoStats[video.id];
+      const hasComments = stats && (stats.commentCount > 0 || stats.audioCount > 0);
+      const hasScreenshots = stats && stats.screenshotCount > 0;
+      const matchesContentFilter =
+        filterHasContent === 'all' ||
+        (filterHasContent === 'with-comments' && hasComments) ||
+        (filterHasContent === 'with-screenshots' && hasScreenshots);
+
+      return matchesSearch && matchesMatchFilter && matchesContentFilter;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'date-desc':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'date-asc':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'name-asc':
+          return a.title.localeCompare(b.title, 'cs');
+        case 'name-desc':
+          return b.title.localeCompare(a.title, 'cs');
+        case 'comments-desc':
+          const aComments = (videoStats[a.id]?.commentCount || 0) + (videoStats[a.id]?.audioCount || 0);
+          const bComments = (videoStats[b.id]?.commentCount || 0) + (videoStats[b.id]?.audioCount || 0);
+          return bComments - aComments;
+        case 'duration-desc':
+          return (b.duration || 0) - (a.duration || 0);
+        default:
+          return 0;
+      }
+    });
 
   if (loading) {
     return (
@@ -161,11 +203,25 @@ export default function VideosPage() {
             />
           </div>
 
+          {/* Sorting */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition min-w-[160px]"
+          >
+            <option value="date-desc">Nejnovější</option>
+            <option value="date-asc">Nejstarší</option>
+            <option value="name-asc">A → Z</option>
+            <option value="name-desc">Z → A</option>
+            <option value="comments-desc">Nejvíce komentářů</option>
+            <option value="duration-desc">Nejdelší</option>
+          </select>
+
           {/* Match filter */}
           <select
             value={filterMatch}
             onChange={(e) => setFilterMatch(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition min-w-[180px]"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition min-w-[160px]"
           >
             <option value="all">Všechny zápasy</option>
             <option value="no-match">Bez zápasu</option>
@@ -174,6 +230,17 @@ export default function VideosPage() {
                 {match.name} ({match.goals_for}:{match.goals_against})
               </option>
             ))}
+          </select>
+
+          {/* Content filter */}
+          <select
+            value={filterHasContent}
+            onChange={(e) => setFilterHasContent(e.target.value as 'all' | 'with-comments' | 'with-screenshots')}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition min-w-[160px]"
+          >
+            <option value="all">Vše</option>
+            <option value="with-comments">S komentáři</option>
+            <option value="with-screenshots">Se screenshoty</option>
           </select>
 
           {/* View mode */}
@@ -194,7 +261,7 @@ export default function VideosPage() {
         </div>
 
         {/* Videos */}
-        {filteredVideos.length === 0 ? (
+        {filteredAndSortedVideos.length === 0 ? (
           <div className="text-center py-12">
             <VideoIcon className="w-12 h-12 mx-auto mb-4 text-gray-600" />
             <p className="text-gray-400 mb-4">
@@ -210,13 +277,13 @@ export default function VideosPage() {
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredVideos.map((video) => (
+            {filteredAndSortedVideos.map((video) => (
               <VideoCard key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} />
             ))}
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredVideos.map((video) => (
+            {filteredAndSortedVideos.map((video) => (
               <VideoListItem key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} />
             ))}
           </div>
@@ -264,7 +331,7 @@ function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStat
           )}
 
           {/* Status indicators */}
-          {stats && (stats.commentCount > 0 || stats.audioCount > 0) && (
+          {stats && (stats.commentCount > 0 || stats.audioCount > 0 || stats.screenshotCount > 0) && (
             <div className="absolute top-2 left-2 flex gap-1.5">
               {stats.commentCount > 0 && (
                 <div className="flex items-center gap-1 bg-green-500/90 px-1.5 py-0.5 rounded text-xs font-medium" title={`${stats.commentCount} komentářů`}>
@@ -274,6 +341,11 @@ function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStat
               {stats.audioCount > 0 && (
                 <div className="flex items-center gap-1 bg-purple-500/90 px-1.5 py-0.5 rounded text-xs font-medium" title={`${stats.audioCount} hlasových komentářů`}>
                   🎙️ {stats.audioCount}
+                </div>
+              )}
+              {stats.screenshotCount > 0 && (
+                <div className="flex items-center gap-1 bg-blue-500/90 px-1.5 py-0.5 rounded text-xs font-medium" title={`${stats.screenshotCount} screenshotů`}>
+                  📷 {stats.screenshotCount}
                 </div>
               )}
             </div>
