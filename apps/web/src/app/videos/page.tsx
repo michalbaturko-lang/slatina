@@ -412,8 +412,13 @@ function VideoCard({ video, stats, onDelete, detectedPlayers, allPlayers }: { vi
                 {formatDate(video.created_at)}
               </span>
             </div>
-            {/* Detected players */}
-            {detectedPlayersList.length > 0 && (
+            {/* Detected players or "not detected" status */}
+            {!detectedPlayers ? (
+              <div className="flex items-center gap-1 mt-2 text-xs text-gray-500 italic">
+                <Users className="w-3 h-3" />
+                Nedetekováno
+              </div>
+            ) : detectedPlayersList.length > 0 ? (
               <div className="flex items-center gap-1 mt-2 flex-wrap">
                 <Users className="w-3 h-3 text-gray-500" />
                 {detectedPlayersList.slice(0, 5).map(player => (
@@ -428,6 +433,11 @@ function VideoCard({ video, stats, onDelete, detectedPlayers, allPlayers }: { vi
                 {detectedPlayersList.length > 5 && (
                   <span className="text-xs text-gray-500">+{detectedPlayersList.length - 5}</span>
                 )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
+                <Users className="w-3 h-3" />
+                Žádní hráči nenalezeni
               </div>
             )}
           </Link>
@@ -522,11 +532,21 @@ function VideoListItem({ video, stats, onDelete, detectedPlayers, allPlayers }: 
               🎙️ {stats.audioCount}
             </span>
           )}
-          {/* Detected players */}
-          {detectedPlayersList.length > 0 && (
+          {/* Detected players or "not detected" status */}
+          {!detectedPlayers ? (
+            <span className="flex items-center gap-1 text-gray-500 italic">
+              <Users className="w-3 h-3" />
+              Nedetekováno
+            </span>
+          ) : detectedPlayersList.length > 0 ? (
             <span className="flex items-center gap-1 text-blue-400">
               <Users className="w-3 h-3" />
               {detectedPlayersList.map(p => p.number || p.name.charAt(0)).join(', ')}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-gray-500">
+              <Users className="w-3 h-3" />
+              0 hráčů
             </span>
           )}
         </div>

@@ -25,7 +25,7 @@ import {
   Match,
 } from '@/lib/team-store';
 import { getVideoIdsWithPlayer } from '@/lib/player-detection';
-import { getVideos, Video as VideoType } from '@/lib/cloud-store';
+import { getVideos, Video as VideoType, getVideoIdsWithPlayerRating, getRatingsForPlayer, VideoRating } from '@/lib/cloud-store';
 import { uploadDataUrl } from '@/lib/upload';
 
 export default function PlayerDetailPage({ params }: { params: { id: string } }) {
@@ -76,12 +76,17 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
       setGoals(playerGoals.length);
       setAssists(playerAssists.length);
 
-      // Load videos where player was detected
-      const videoIds = getVideoIdsWithPlayer(params.id);
-      if (videoIds.length > 0) {
+      // Load videos where player was detected (by jersey number) or rated (Hodnocení)
+      const detectedVideoIds = getVideoIdsWithPlayer(params.id);
+      const ratedVideoIds = await getVideoIdsWithPlayerRating(params.id);
+
+      // Combine and deduplicate video IDs
+      const allVideoIds = [...new Set([...detectedVideoIds, ...ratedVideoIds])];
+
+      if (allVideoIds.length > 0) {
         const allVideos = await getVideos();
-        const detectedVideos = allVideos.filter(v => videoIds.includes(v.id));
-        setPlayerVideos(detectedVideos);
+        const playerVids = allVideos.filter(v => allVideoIds.includes(v.id));
+        setPlayerVideos(playerVids);
       }
 
       setLoading(false);

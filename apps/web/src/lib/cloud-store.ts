@@ -710,3 +710,66 @@ export async function updateMatchPlayer(id: string, updates: Partial<MatchPlayer
   if (error) throw error;
   return data;
 }
+
+// ============ VIDEO RATINGS (Hodnocení) ============
+
+export type RatingType = 'problem' | 'interesting' | 'praise';
+
+export interface VideoRating {
+  id: string;
+  video_id: string;
+  time: number;
+  type: RatingType;
+  player_id?: string;
+  player_name?: string;
+  note?: string;
+  created_at: string;
+}
+
+export async function getRatings(videoId: string): Promise<VideoRating[]> {
+  // Local storage only for now
+  if (typeof window === 'undefined') return [];
+  const data = localStorage.getItem('slatina-video-ratings');
+  const ratings: VideoRating[] = data ? JSON.parse(data) : [];
+  return ratings.filter(r => r.video_id === videoId);
+}
+
+export async function getAllRatings(): Promise<VideoRating[]> {
+  if (typeof window === 'undefined') return [];
+  const data = localStorage.getItem('slatina-video-ratings');
+  return data ? JSON.parse(data) : [];
+}
+
+export async function createRating(rating: Omit<VideoRating, 'id' | 'created_at'>): Promise<VideoRating> {
+  const newRating: VideoRating = {
+    ...rating,
+    id: `rating-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    created_at: new Date().toISOString(),
+  };
+
+  if (typeof window !== 'undefined') {
+    const ratings = JSON.parse(localStorage.getItem('slatina-video-ratings') || '[]');
+    ratings.push(newRating);
+    localStorage.setItem('slatina-video-ratings', JSON.stringify(ratings));
+  }
+
+  return newRating;
+}
+
+export async function deleteRating(id: string): Promise<void> {
+  if (typeof window !== 'undefined') {
+    const ratings = JSON.parse(localStorage.getItem('slatina-video-ratings') || '[]');
+    const filtered = ratings.filter((r: VideoRating) => r.id !== id);
+    localStorage.setItem('slatina-video-ratings', JSON.stringify(filtered));
+  }
+}
+
+export async function getRatingsForPlayer(playerId: string): Promise<VideoRating[]> {
+  const ratings = await getAllRatings();
+  return ratings.filter(r => r.player_id === playerId);
+}
+
+export async function getVideoIdsWithPlayerRating(playerId: string): Promise<string[]> {
+  const ratings = await getRatingsForPlayer(playerId);
+  return [...new Set(ratings.map(r => r.video_id))];
+}

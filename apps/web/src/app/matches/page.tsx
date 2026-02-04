@@ -37,6 +37,7 @@ import {
   MatchPlayer,
 } from '@/lib/cloud-store';
 import { OPPONENT_TEAMS } from '@/lib/team-store';
+import { getVideoPlayers, VideoPlayersData } from '@/lib/player-detection';
 
 type ResultFilter = 'all' | 'win' | 'loss' | 'draw';
 
@@ -45,6 +46,7 @@ export default function MatchesPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matchPlayers, setMatchPlayers] = useState<Record<string, string[]>>({});
+  const [videoPlayersData, setVideoPlayersData] = useState<VideoPlayersData>({});
   const [loading, setLoading] = useState(true);
   const [filterResult, setFilterResult] = useState<ResultFilter>('all');
   const [filterOpponent, setFilterOpponent] = useState<string>('all');
@@ -81,6 +83,9 @@ export default function MatchesPage() {
         setMatches(matchesData);
         setVideos(videosData);
         setPlayers(playersData.filter(p => p.active));
+
+        // Load video player detections (from localStorage)
+        setVideoPlayersData(getVideoPlayers());
 
         // Load match-player associations for all matches from cloud
         const matchPlayerMap: Record<string, string[]> = {};
@@ -150,6 +155,14 @@ export default function MatchesPage() {
   // Get videos for a specific match
   const getMatchVideos = (matchId: string) => {
     return videos.filter(v => v.match_id === matchId);
+  };
+
+  // Get detected players for a video
+  const getVideoDetectedPlayers = (videoId: string) => {
+    const detection = videoPlayersData[videoId];
+    if (!detection) return null; // No detection yet
+    const detectedPlayerIds = detection.playerIds || [];
+    return players.filter(p => detectedPlayerIds.includes(p.id));
   };
 
   // Get videos without a match (orphaned)
@@ -810,52 +823,95 @@ export default function MatchesPage() {
                             Videa ze zápasu ({matchVideos.length})
                           </h4>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-                            {matchVideos.map(video => (
-                              <Link
-                                key={video.id}
-                                href={`/videos/${video.id}`}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 12,
-                                  padding: 12,
-                                  backgroundColor: '#1f2937',
-                                  borderRadius: 8,
-                                  textDecoration: 'none',
-                                  color: 'white',
-                                }}
-                              >
-                                {video.thumbnail_url ? (
-                                  <img
-                                    src={video.thumbnail_url}
-                                    alt=""
-                                    style={{ width: 60, height: 40, borderRadius: 4, objectFit: 'cover' }}
-                                  />
-                                ) : (
-                                  <div style={{
-                                    width: 60,
-                                    height: 40,
-                                    backgroundColor: '#374151',
-                                    borderRadius: 4,
+                            {matchVideos.map(video => {
+                              const detectedPlayers = getVideoDetectedPlayers(video.id);
+                              return (
+                                <Link
+                                  key={video.id}
+                                  href={`/videos/${video.id}`}
+                                  style={{
                                     display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                  }}>
-                                    <Play size={16} style={{ opacity: 0.5 }} />
+                                    flexDirection: 'column',
+                                    gap: 8,
+                                    padding: 12,
+                                    backgroundColor: '#1f2937',
+                                    borderRadius: 8,
+                                    textDecoration: 'none',
+                                    color: 'white',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    {video.thumbnail_url ? (
+                                      <img
+                                        src={video.thumbnail_url}
+                                        alt=""
+                                        style={{ width: 60, height: 40, borderRadius: 4, objectFit: 'cover' }}
+                                      />
+                                    ) : (
+                                      <div style={{
+                                        width: 60,
+                                        height: 40,
+                                        backgroundColor: '#374151',
+                                        borderRadius: 4,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}>
+                                        <Play size={16} style={{ opacity: 0.5 }} />
+                                      </div>
+                                    )}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {video.title}
+                                      </p>
+                                      {video.duration && (
+                                        <p style={{ fontSize: 11, color: '#9ca3af' }}>
+                                          {Math.floor(video.duration / 60)}:{String(Math.floor(video.duration % 60)).padStart(2, '0')}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
-                                )}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <p style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {video.title}
-                                  </p>
-                                  {video.duration && (
-                                    <p style={{ fontSize: 11, color: '#9ca3af' }}>
-                                      {Math.floor(video.duration / 60)}:{String(Math.floor(video.duration % 60)).padStart(2, '0')}
-                                    </p>
+                                  {/* Show detected players or "not detected" status */}
+                                  {detectedPlayers === null ? (
+                                    <div style={{
+                                      fontSize: 11,
+                                      color: '#6b7280',
+                                      fontStyle: 'italic',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                    }}>
+                                      <Users size={12} />
+                                      Nedetekováno
+                                    </div>
+                                  ) : detectedPlayers.length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                      {detectedPlayers.map(p => (
+                                        <span
+                                          key={p.id}
+                                          style={{
+                                            fontSize: 10,
+                                            padding: '2px 6px',
+                                            backgroundColor: '#166534',
+                                            borderRadius: 4,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 3,
+                                          }}
+                                        >
+                                          {p.number && <strong>#{p.number}</strong>}
+                                          {p.name.split(' ')[0]}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                                      Žádní hráči nenalezeni
+                                    </div>
                                   )}
-                                </div>
-                              </Link>
-                            ))}
+                                </Link>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (

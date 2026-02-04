@@ -46,11 +46,16 @@ import {
   createPlayerClip,
   getMatch,
   getVideos,
+  getRatings,
+  createRating,
+  deleteRating as deleteRatingCloud,
   Video,
   Screenshot,
   AudioComment,
   Comment,
   Match,
+  VideoRating,
+  RatingType,
 } from '@/lib/cloud-store';
 import { getPlayers, Player, addPlayerClip as addPlayerClipLocal } from '@/lib/team-store';
 import { uploadFile, uploadDataUrl } from '@/lib/upload';
@@ -156,16 +161,8 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [showThumbnailModal, setShowThumbnailModal] = useState(false);
 
   // Ratings (red=problem, orange=interesting, green=praise)
-  type RatingType = 'problem' | 'interesting' | 'praise';
-  interface Rating {
-    id: string;
-    time: number;
-    type: RatingType;
-    playerId?: string;
-    playerName?: string;
-    note?: string;
-  }
-  const [ratings, setRatings] = useState<Rating[]>([]);
+  // Using VideoRating from cloud-store for persistence
+  const [ratings, setRatings] = useState<VideoRating[]>([]);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [pendingRating, setPendingRating] = useState<{ type: RatingType } | null>(null);
 
@@ -252,10 +249,11 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         setVideo(videoData);
 
         // Load related data
-        const [screenshotsData, audioData, commentsData, allVideos] = await Promise.all([
+        const [screenshotsData, audioData, commentsData, ratingsData, allVideos] = await Promise.all([
           getScreenshots(params.id),
           getAudioComments(params.id),
           getComments(params.id),
+          getRatings(params.id),
           getVideos(),
         ]);
 
@@ -265,6 +263,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
         setScreenshots(screenshotsData);
         setAudioComments(audioData);
         setComments(commentsData);
+        setRatings(ratingsData);
         setAllPlayers(playersData.filter(p => p.active));
 
         // Load match and match videos if video has a match_id
@@ -860,19 +859,22 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     }
   }, [video]);
 
-  // Add rating
-  const handleAddRating = useCallback((type: RatingType, player?: Player) => {
-    const newRating: Rating = {
-      id: `rating-${Date.now()}`,
+  // Add rating and persist to storage
+  const handleAddRating = useCallback(async (type: RatingType, player?: Player) => {
+    if (!video) return;
+
+    const newRating = await createRating({
+      video_id: video.id,
       time: currentTime,
       type,
-      playerId: player?.id,
-      playerName: player?.name,
-    };
+      player_id: player?.id,
+      player_name: player?.name,
+    });
+
     setRatings(prev => [...prev, newRating]);
     setShowRatingModal(false);
     setPendingRating(null);
-  }, [currentTime]);
+  }, [currentTime, video]);
 
   // Share from specific moment
   const shareFromMoment = useCallback(async () => {
@@ -1041,7 +1043,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
     ...comments.map(c => ({ id: c.id, time: c.time, type: 'comment' as const, label: c.text.substring(0, 20) })),
     ...screenshots.map(s => ({ id: s.id, time: s.time, type: 'screenshot' as const })),
     ...audioComments.map(a => ({ id: a.id, time: a.time, type: 'audio' as const, label: a.transcript?.substring(0, 20) })),
-    ...ratings.map(r => ({ id: r.id, time: r.time, type: r.type as any, label: r.playerName })),
+    ...ratings.map(r => ({ id: r.id, time: r.time, type: r.type as any, label: r.player_name })),
   ];
 
   if (loading) {
@@ -1719,10 +1721,10 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                 </span>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: 11, color: '#9ca3af' }}>{formatTime(r.time)}</div>
-                  {r.playerName && <div style={{ fontSize: 12, fontWeight: 500 }}>{r.playerName}</div>}
+                  {r.player_name && <div style={{ fontSize: 12, fontWeight: 500 }}>{r.player_name}</div>}
                 </div>
                 <button
-                  onClick={(e) => { e.stopPropagation(); setRatings(prev => prev.filter(x => x.id !== r.id)); }}
+                  onClick={(e) => { e.stopPropagation(); deleteRatingCloud(r.id); setRatings(prev => prev.filter(x => x.id !== r.id)); }}
                   style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 2, marginLeft: 4 }}
                 >
                   <X size={12} />
