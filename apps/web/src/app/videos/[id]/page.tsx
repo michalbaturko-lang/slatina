@@ -60,6 +60,7 @@ import {
 import { getPlayers, Player, addPlayerClip as addPlayerClipLocal } from '@/lib/team-store';
 import { uploadFile, uploadDataUrl } from '@/lib/upload';
 import PlayerDetection from '@/components/PlayerDetection';
+import { getVideoPlayers, VideoPlayersData } from '@/lib/player-detection';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'playerMarker';
 
@@ -107,6 +108,7 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
   const [video, setVideo] = useState<Video | null>(null);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [matchVideos, setMatchVideos] = useState<Video[]>([]);
+  const [allVideoPlayers, setAllVideoPlayers] = useState<VideoPlayersData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -298,6 +300,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
             console.error('Failed to load match:', err);
           }
         }
+
+        // Load video players data for all videos (for showing player badges in thumbnails)
+        setAllVideoPlayers(getVideoPlayers());
 
         setLoading(false);
       } catch (err) {
@@ -1921,15 +1926,39 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
                         {idx + 1}/{matchVideos.length}
                       </div>
                     </div>
-                    <div style={{ padding: '6px 8px' }}>
-                      <p style={{
-                        fontSize: 11,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {v.title.replace(currentMatch.name + ': ', '').replace(currentMatch.name.split(':')[0] + ': ', '')}
-                      </p>
+                    <div style={{ padding: '4px 6px', minHeight: 28 }}>
+                      {(() => {
+                        const videoPlayerData = allVideoPlayers[v.id];
+                        if (!videoPlayerData || videoPlayerData.numbers.length === 0) {
+                          return (
+                            <p style={{ fontSize: 10, color: '#6b7280', textAlign: 'center' }}>
+                              -
+                            </p>
+                          );
+                        }
+                        // Show player numbers as badges
+                        const matchedPlayers = videoPlayerData.playerIds
+                          .map(id => allPlayers.find(p => p.id === id))
+                          .filter(Boolean);
+                        return (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
+                            {matchedPlayers.map(p => (
+                              <span
+                                key={p!.id}
+                                style={{
+                                  fontSize: 9,
+                                  padding: '1px 4px',
+                                  backgroundColor: '#166534',
+                                  borderRadius: 3,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {p!.number || '?'}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </Link>
                 );
