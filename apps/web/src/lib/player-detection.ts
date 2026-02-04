@@ -105,36 +105,75 @@ export async function extractFramesFromVideo(
 }
 
 /**
- * Detect players from video frames using the API
+ * Sleep for a given number of milliseconds
  */
-export async function detectPlayersFromFrames(frames: string[]): Promise<DetectionResult> {
-  const response = await fetch('/api/detect-players', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ images: frames }),
-  });
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Detection failed');
+/**
+ * Detect players from video frames using the API
+ * Includes retry logic with exponential backoff for rate limiting (429 errors)
+ */
+export async function detectPlayersFromFrames(
+  frames: string[],
+  maxRetries: number = 3
+): Promise<DetectionResult> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('/api/detect-players', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ images: frames }),
+      });
+
+      if (response.status === 429) {
+        // Rate limited - wait and retry with exponential backoff
+        const waitTime = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s, 16s
+        console.log(`Rate limited (429), waiting ${waitTime / 1000}s before retry ${attempt + 1}/${maxRetries}`);
+
+        if (attempt < maxRetries) {
+          await sleep(waitTime);
+          continue;
+        } else {
+          throw new Error('OpenAI API error: 429 - Příliš mnoho požadavků. Zkuste to za chvíli znovu.');
+        }
+      }
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Detection failed');
+      }
+
+      const data = await response.json();
+
+      // Match detected numbers to players
+      const allPlayers = getPlayers();
+      const detectedPlayers = data.numbers
+        .map((num: number) => allPlayers.find(p => p.number === num))
+        .filter(Boolean) as Player[];
+
+      return {
+        numbers: data.numbers,
+        confidence: data.confidence,
+        players: detectedPlayers,
+        detectedAt: Date.now(),
+      };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      // Don't retry on non-429 errors
+      if (!lastError.message.includes('429')) {
+        throw lastError;
+      }
+    }
   }
 
-  const data = await response.json();
-
-  // Match detected numbers to players
-  const allPlayers = getPlayers();
-  const detectedPlayers = data.numbers
-    .map((num: number) => allPlayers.find(p => p.number === num))
-    .filter(Boolean) as Player[];
-
-  return {
-    numbers: data.numbers,
-    confidence: data.confidence,
-    players: detectedPlayers,
-    detectedAt: Date.now(),
-  };
+  throw lastError || new Error('Detection failed after retries');
 }
 
 /**

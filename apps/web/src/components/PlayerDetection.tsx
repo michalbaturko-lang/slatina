@@ -48,16 +48,8 @@ export default function PlayerDetection({ videoId, videoUrl, onPlayersDetected }
     }
   }, [videoId, onPlayersDetected]);
 
-  // Auto-detect on first load if no existing detection
-  useEffect(() => {
-    if (!hasExistingDetection && videoUrl && !isDetecting && detectedPlayers.length === 0) {
-      // Delay auto-detection to allow video to load
-      const timer = setTimeout(() => {
-        runDetection();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [videoUrl, hasExistingDetection]);
+  // Auto-detection removed - now manual only to avoid OpenAI API rate limits (429)
+  // Users click "Detekovat" to start detection
 
   const runDetection = useCallback(async () => {
     if (!videoUrl || isDetecting) return;
