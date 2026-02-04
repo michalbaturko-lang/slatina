@@ -224,7 +224,9 @@
       <li>Screenshoty a sdílení</li>
       <li>Historie zápasů</li>
       <li>Správa hráčů v zápasech</li>
-      <li>Správa videí (NOVINKA v1.3)</li>
+      <li>Správa videí</li>
+      <li>Profily hráčů (NOVINKA v1.4)</li>
+      <li>Automatická detekce hráčů (NOVINKA v1.4)</li>
       <li>Tipy a triky</li>
       <li>Historie verzí</li>
     </ol>
@@ -780,9 +782,154 @@ Vytvořeno v Slatina Video Analysis
     <strong>Rychlá navigace:</strong> Kliknutím na číslo ve spodní liště okamžitě přeskočíte na jiné video ze stejného zápasu, aniž byste se museli vracet do seznamu.
   </div>
 
+  <!-- ==================== PROFILY HRÁČŮ ==================== -->
+  <div class="page-break"></div>
+  <h2>11. Profily hráčů (NOVINKA v1.4)</h2>
+
+  <p>Každý hráč má nyní vlastní profil s přehledem jeho videí, zápasů, statistik a hodnocení od trenérů.</p>
+
+  <h3>Co najdete v profilu hráče</h3>
+  <ul>
+    <li><strong>Fotka hráče</strong> - můžete nahrát kliknutím na ikonu fotoaparátu</li>
+    <li><strong>Statistiky</strong> - počet zápasů, gólů, asistencí a komentářů</li>
+    <li><strong>Videa s hráčem</strong> - všechna videa, kde byl hráč detekován nebo označen</li>
+    <li><strong>Zápasy</strong> - přehled zápasů, kterých se hráč zúčastnil</li>
+    <li><strong>Komentáře</strong> - všechna hodnocení a poznámky k hráči</li>
+  </ul>
+
+  <h3>Jak se dostat do profilu</h3>
+  <ol>
+    <li>Přejděte na stránku <strong>"Hráči"</strong></li>
+    <li>Klikněte na kartu konkrétního hráče</li>
+  </ol>
+
+  <h3>Filtrování videí v profilu</h3>
+  <p>Videa v profilu hráče lze filtrovat podle typu:</p>
+  <ul>
+    <li><strong>Vše</strong> - všechna videa s hráčem</li>
+    <li><strong>Zápasy</strong> - pouze videa ze zápasů</li>
+    <li><strong>Turnaje</strong> - pouze videa z turnajů</li>
+    <li><strong>Bez zápasu</strong> - videa, která nejsou přiřazena k žádnému zápasu</li>
+  </ul>
+
+  <div class="screen-mockup">
+┌─────────────────────────────────────────────────────────┐
+│  [←]  Míša Baturko                                      │
+├─────────────────────────────────────────────────────────┤
+│       ┌─────┐                                           │
+│       │  8  │  Míša Baturko                             │
+│       │ 📷  │  #8 • Hráč                                │
+│       └─────┘                                           │
+│                                                         │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐                       │
+│  │  5  │ │  2  │ │  1  │ │  8  │                       │
+│  │Zápas│ │Góly │ │Asist│ │Komen│                       │
+│  └─────┘ └─────┘ └─────┘ └─────┘                       │
+├─────────────────────────────────────────────────────────┤
+│  Videa s hráčem (4)   [Vše][Zápasy][Turnaje][Bez záp.] │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 🖼️ Slatina vs Prace     [Zápas] 1:6            │   │
+│  └─────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 🖼️ Turnaj Vinohrady     [Turnaj] Slovan 3:1    │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+  </div>
+
+  <div class="tip-box">
+    <strong>💡 Tip:</strong> Nahrajte hráčům fotky! Profily s fotkou vypadají mnohem lépe a hráči se v aplikaci snáze orientují.
+  </div>
+
+  <!-- ==================== AUTOMATICKÁ DETEKCE ==================== -->
+  <div class="page-break"></div>
+  <h2>12. Automatická detekce hráčů (NOVINKA v1.4)</h2>
+
+  <p>Aplikace nyní automaticky rozpoznává hráče SK Slatina podle čísel na bílých dresech pomocí umělé inteligence.</p>
+
+  <h3>Jak detekce funguje</h3>
+  <ol>
+    <li>Při otevření videa se <strong>automaticky spustí</strong> analýza</li>
+    <li>Systém extrahuje několik snímků z videa</li>
+    <li>AI analyzuje snímky a hledá <strong>čísla na bílých dresech</strong></li>
+    <li>Nalezená čísla se spárují s hráči v databázi</li>
+    <li>Detekovaní hráči se zobrazí pod videem</li>
+  </ol>
+
+  <h3>Kde se detekce zobrazuje</h3>
+  <ul>
+    <li><strong>Video detail</strong> - sekce "Hráči ve videu" pod videem</li>
+    <li><strong>Seznam videí</strong> - u každého videa je vidět seznam detekovaných hráčů nebo "Nedetekováno"</li>
+    <li><strong>Zápasy</strong> - u každého videa v zápase jsou zobrazeni detekovaní hráči</li>
+    <li><strong>Profil hráče</strong> - automaticky se přidají videa, kde byl hráč detekován</li>
+  </ul>
+
+  <div class="screen-mockup">
+┌─────────────────────────────────────────────────────────┐
+│  Hráči ve videu                    [Upravit] [Znovu]   │
+├─────────────────────────────────────────────────────────┤
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐                │
+│  │ #8 Míša  │ │ #10 Honza│ │ #11 Filip│                │
+│  └──────────┘ └──────────┘ └──────────┘                │
+│                                                         │
+│  Nerozpoznaná čísla: #15 #23  (nejsou v soupisce)      │
+└─────────────────────────────────────────────────────────┘
+  </div>
+
+  <h3>Ruční úprava detekce</h3>
+  <p>Pokud detekce nenalezla všechny hráče nebo se spletla:</p>
+  <ol>
+    <li>Klikněte na tlačítko <strong>"Upravit"</strong></li>
+    <li>Zobrazí se seznam všech hráčů</li>
+    <li>Zaškrtněte/odškrtněte hráče kliknutím</li>
+    <li>Klikněte na <strong>"Uložit"</strong></li>
+  </ol>
+
+  <h3>Opakování detekce</h3>
+  <p>Tlačítko <strong>"Znovu"</strong> spustí novou detekci s jinými snímky z videa. Užitečné když:</p>
+  <ul>
+    <li>První detekce nenašla všechny hráče</li>
+    <li>Hráči byli v záběru jen krátce</li>
+    <li>Video má mnoho různých scén</li>
+  </ul>
+
+  <h3>Hodnocení hráčů (⚠️💡⭐)</h3>
+  <p>Když přidáte hodnocení a vyberete konkrétního hráče, toto hodnocení se automaticky:</p>
+  <ul>
+    <li>Uloží k videu</li>
+    <li>Zobrazí v profilu daného hráče</li>
+    <li>Video se přidá do seznamu "Videa s hráčem" v profilu</li>
+  </ul>
+
+  <div class="feature-box">
+    <strong>Jak to propojit:</strong>
+    <ol>
+      <li>Při hodnocení (⚠️💡⭐) vyberte konkrétního hráče</li>
+      <li>Hodnocení se uloží a zobrazí na timeline</li>
+      <li>V profilu hráče uvidíte toto video i hodnocení</li>
+    </ol>
+  </div>
+
+  <h3>Status detekce</h3>
+  <p>Na kartě videa v seznamu vidíte status:</p>
+  <ul>
+    <li><strong style="color: #6b7280; font-style: italic;">Nedetekováno</strong> - video ještě nebylo analyzováno</li>
+    <li><strong style="color: #60a5fa;">#8 Míša, #10 Honza</strong> - nalezení hráči</li>
+    <li><strong style="color: #9ca3af;">Žádní hráči nenalezeni</strong> - detekce proběhla, ale nic nenašla</li>
+  </ul>
+
+  <div class="warning-box">
+    <strong>⚠️ Omezení:</strong> Detekce funguje nejlépe když:
+    <ul>
+      <li>Hráči mají viditelná čísla na dresech</li>
+      <li>Video má dostatečnou kvalitu</li>
+      <li>Dresy jsou bílé (SK Slatina domácí)</li>
+    </ul>
+    U videí se špatnou kvalitou nebo tmavými dresy může být detekce méně přesná.
+  </div>
+
   <!-- ==================== TIPY ==================== -->
   <div class="page-break"></div>
-  <h2>11. Tipy a triky</h2>
+  <h2>13. Tipy a triky</h2>
 
   <h3>Efektivní workflow</h3>
   <ol>
@@ -826,13 +973,28 @@ Vytvořeno v Slatina Video Analysis
 
   <!-- ==================== HISTORIE VERZÍ ==================== -->
   <div class="page-break"></div>
-  <h2>12. Historie verzí</h2>
+  <h2>14. Historie verzí</h2>
 
   <table>
     <tr>
       <th>Verze</th>
       <th>Datum</th>
       <th>Změny</th>
+    </tr>
+    <tr>
+      <td><strong>v1.4</strong></td>
+      <td>4.2.2026</td>
+      <td>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li><strong>Profily hráčů</strong> - každý hráč má vlastní stránku s fotkou, statistikami a videi</li>
+          <li><strong>Automatická detekce</strong> - AI rozpoznává hráče podle čísel na dresech</li>
+          <li><strong>Hráči ve videu</strong> - sekce zobrazující detekované hráče pod každým videem</li>
+          <li><strong>Propojení videí</strong> - videa se automaticky přiřazují k profilům hráčů</li>
+          <li><strong>Trvalé hodnocení</strong> - hodnocení (⚠️💡⭐) se ukládají a zobrazují v profilu hráče</li>
+          <li><strong>Filtrování v profilu</strong> - videa lze filtrovat podle zápasů/turnajů</li>
+          <li><strong>Status detekce</strong> - zobrazení "Nedetekováno" u videí bez analýzy</li>
+        </ul>
+      </td>
     </tr>
     <tr>
       <td><strong>v1.3</strong></td>
@@ -899,7 +1061,7 @@ Vytvořeno v Slatina Video Analysis
   <footer>
     <p><strong>SK Slatina 2017 - Videoanalýza</strong></p>
     <p>https://skslatina.fun</p>
-    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: <strong>v1.3</strong> (3.2.2026)</p>
+    <p style="margin-top: 8px; font-size: 12px;">Verze dokumentace: <strong>v1.4</strong> (4.2.2026)</p>
     <p style="font-size: 11px; color: #9ca3af;">Manuál: https://skslatina.fun/docs/manual-treneri.html</p>
   </footer>
 

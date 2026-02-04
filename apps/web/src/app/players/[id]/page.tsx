@@ -25,7 +25,7 @@ import {
   Match,
 } from '@/lib/team-store';
 import { getVideoIdsWithPlayer } from '@/lib/player-detection';
-import { getVideos, Video as VideoType, getVideoIdsWithPlayerRating, getRatingsForPlayer, VideoRating } from '@/lib/cloud-store';
+import { getVideos, Video as VideoType, getVideoIdsWithPlayerRating, getRatingsForPlayer, VideoRating, getMatches as getMatchesCloud, Match as MatchCloud } from '@/lib/cloud-store';
 import { uploadDataUrl } from '@/lib/upload';
 
 export default function PlayerDetailPage({ params }: { params: { id: string } }) {
@@ -41,6 +41,8 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
   // Videos where player appears (from detection)
   const [playerVideos, setPlayerVideos] = useState<VideoType[]>([]);
+  const [allMatches, setAllMatches] = useState<MatchCloud[]>([]);
+  const [videoFilter, setVideoFilter] = useState<'all' | 'match' | 'tournament' | 'orphan'>('all');
 
   // Photo upload
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -83,8 +85,15 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
       // Combine and deduplicate video IDs
       const allVideoIds = [...new Set([...detectedVideoIds, ...ratedVideoIds])];
 
+      // Load all videos and matches
+      const [allVideos, matchesData] = await Promise.all([
+        getVideos(),
+        getMatchesCloud(),
+      ]);
+
+      setAllMatches(matchesData);
+
       if (allVideoIds.length > 0) {
-        const allVideos = await getVideos();
         const playerVids = allVideos.filter(v => allVideoIds.includes(v.id));
         setPlayerVideos(playerVids);
       }
@@ -297,61 +306,126 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
         {/* Videos Section */}
         {playerVideos.length > 0 && (
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{
-              fontSize: 16,
-              fontWeight: 600,
-              marginBottom: 12,
+            <div style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 12,
+              flexWrap: 'wrap',
               gap: 8,
             }}>
-              <Video size={18} style={{ color: '#60a5fa' }} />
-              Videa s hráčem ({playerVideos.length})
-            </h3>
+              <h3 style={{
+                fontSize: 16,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                <Video size={18} style={{ color: '#60a5fa' }} />
+                Videa s hráčem ({playerVideos.length})
+              </h3>
+              {/* Filter buttons */}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {[
+                  { key: 'all', label: 'Vše' },
+                  { key: 'match', label: 'Zápasy' },
+                  { key: 'tournament', label: 'Turnaje' },
+                  { key: 'orphan', label: 'Bez zápasu' },
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setVideoFilter(f.key as typeof videoFilter)}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      borderRadius: 6,
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: videoFilter === f.key ? '#2563eb' : '#374151',
+                      color: 'white',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {playerVideos.map(video => (
-                <Link
-                  key={video.id}
-                  href={`/videos/${video.id}`}
-                  style={{
-                    backgroundColor: '#1f2937',
-                    borderRadius: 12,
-                    padding: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    textDecoration: 'none',
-                    color: 'white',
-                  }}
-                >
-                  {video.thumbnail_url ? (
-                    <img
-                      src={video.thumbnail_url}
-                      alt=""
-                      style={{ width: 80, height: 45, borderRadius: 8, objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div style={{
-                      width: 80,
-                      height: 45,
-                      borderRadius: 8,
-                      backgroundColor: '#374151',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      <Video size={20} style={{ color: '#6b7280' }} />
-                    </div>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500, fontSize: 14 }}>{video.title}</div>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                      {new Date(video.created_at).toLocaleDateString('cs-CZ')}
-                    </div>
-                  </div>
-                  <ChevronRight size={18} style={{ color: '#6b7280' }} />
-                </Link>
-              ))}
+              {playerVideos
+                .filter(video => {
+                  const match = allMatches.find(m => m.id === video.match_id);
+                  if (videoFilter === 'all') return true;
+                  if (videoFilter === 'match') return match && match.type === 'match';
+                  if (videoFilter === 'tournament') return match && match.type === 'tournament';
+                  if (videoFilter === 'orphan') return !video.match_id;
+                  return true;
+                })
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .map(video => {
+                  const match = allMatches.find(m => m.id === video.match_id);
+                  return (
+                    <Link
+                      key={video.id}
+                      href={`/videos/${video.id}`}
+                      style={{
+                        backgroundColor: '#1f2937',
+                        borderRadius: 12,
+                        padding: 12,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        textDecoration: 'none',
+                        color: 'white',
+                      }}
+                    >
+                      {video.thumbnail_url ? (
+                        <img
+                          src={video.thumbnail_url}
+                          alt=""
+                          style={{ width: 80, height: 45, borderRadius: 8, objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: 80,
+                          height: 45,
+                          borderRadius: 8,
+                          backgroundColor: '#374151',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <Video size={20} style={{ color: '#6b7280' }} />
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 500, fontSize: 14 }}>{video.title}</div>
+                        <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {match ? (
+                            <>
+                              <span style={{
+                                padding: '1px 5px',
+                                borderRadius: 4,
+                                backgroundColor: match.type === 'tournament' ? '#7c3aed' : '#059669',
+                                fontSize: 10,
+                              }}>
+                                {match.type === 'tournament' ? 'Turnaj' : 'Zápas'}
+                              </span>
+                              <span>{match.name}</span>
+                              {match.goals_for !== undefined && match.goals_against !== undefined && (
+                                <span style={{ fontWeight: 600 }}>
+                                  {match.goals_for}:{match.goals_against}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span>{new Date(video.created_at).toLocaleDateString('cs-CZ')}</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight size={18} style={{ color: '#6b7280' }} />
+                    </Link>
+                  );
+                })}
             </div>
           </div>
         )}
