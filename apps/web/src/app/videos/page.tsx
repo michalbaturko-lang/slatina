@@ -23,6 +23,8 @@ import {
   Filter,
 } from 'lucide-react';
 import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment } from '@/lib/cloud-store';
+import { getPlayers, Player } from '@/lib/team-store';
+import { getVideoPlayers, VideoPlayersData } from '@/lib/player-detection';
 
 interface VideoStats {
   commentCount: number;
@@ -40,8 +42,11 @@ export default function VideosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMatch, setFilterMatch] = useState<string>('all');
   const [filterHasContent, setFilterHasContent] = useState<'all' | 'with-comments' | 'with-screenshots'>('all');
+  const [filterPlayer, setFilterPlayer] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortOption>('date-desc');
   const [videoStats, setVideoStats] = useState<Record<string, VideoStats>>({});
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [videoPlayersData, setVideoPlayersData] = useState<VideoPlayersData>({});
 
   useEffect(() => {
     loadVideos();
@@ -55,6 +60,17 @@ export default function VideosPage() {
       ]);
       setVideos(storedVideos);
       setMatches(storedMatches);
+
+      // Load players and video-players associations
+      const allPlayers = getPlayers().filter(p => p.active);
+      const videoPlayers = getVideoPlayers();
+      setPlayers(allPlayers.sort((a, b) => {
+        if (a.number && b.number) return a.number - b.number;
+        if (a.number) return -1;
+        if (b.number) return 1;
+        return a.name.localeCompare(b.name, 'cs');
+      }));
+      setVideoPlayersData(videoPlayers);
 
       // Load stats for each video
       const stats: Record<string, VideoStats> = {};
@@ -116,7 +132,12 @@ export default function VideosPage() {
         (filterHasContent === 'with-comments' && hasComments) ||
         (filterHasContent === 'with-screenshots' && hasScreenshots);
 
-      return matchesSearch && matchesMatchFilter && matchesContentFilter;
+      // Player filter
+      const videoPlayerInfo = videoPlayersData[video.id];
+      const matchesPlayerFilter = filterPlayer === 'all' ||
+        (videoPlayerInfo && videoPlayerInfo.playerIds.includes(filterPlayer));
+
+      return matchesSearch && matchesMatchFilter && matchesContentFilter && matchesPlayerFilter;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -243,6 +264,20 @@ export default function VideosPage() {
             <option value="with-screenshots">Se screenshoty</option>
           </select>
 
+          {/* Player filter */}
+          <select
+            value={filterPlayer}
+            onChange={(e) => setFilterPlayer(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 transition min-w-[160px]"
+          >
+            <option value="all">Všichni hráči</option>
+            {players.map(player => (
+              <option key={player.id} value={player.id}>
+                {player.number ? `${player.number} - ` : ''}{player.name}
+              </option>
+            ))}
+          </select>
+
           {/* View mode */}
           <div className="flex items-center bg-gray-800 rounded-lg p-1">
             <button
@@ -278,13 +313,13 @@ export default function VideosPage() {
         ) : viewMode === 'grid' ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredAndSortedVideos.map((video) => (
-              <VideoCard key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} />
+              <VideoCard key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} detectedPlayers={videoPlayersData[video.id]} allPlayers={players} />
             ))}
           </div>
         ) : (
           <div className="space-y-2">
             {filteredAndSortedVideos.map((video) => (
-              <VideoListItem key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} />
+              <VideoListItem key={video.id} video={video} stats={videoStats[video.id]} onDelete={handleDeleteVideo} detectedPlayers={videoPlayersData[video.id]} allPlayers={players} />
             ))}
           </div>
         )}
@@ -293,7 +328,13 @@ export default function VideosPage() {
   );
 }
 
-function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStats; onDelete: (id: string) => void }) {
+interface DetectedPlayersInfo {
+  playerIds: string[];
+  numbers: number[];
+  confidence?: string;
+}
+
+function VideoCard({ video, stats, onDelete, detectedPlayers, allPlayers }: { video: Video; stats?: VideoStats; onDelete: (id: string) => void; detectedPlayers?: DetectedPlayersInfo; allPlayers: Player[] }) {
   const [showMenu, setShowMenu] = useState(false);
 
   const formatDuration = (seconds: number): string => {
@@ -301,6 +342,11 @@ function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStat
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Get detected players with names
+  const detectedPlayersList = detectedPlayers?.playerIds
+    .map(id => allPlayers.find(p => p.id === id))
+    .filter(Boolean) as Player[] || [];
 
   return (
     <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 hover:border-gray-600 transition group">
@@ -366,6 +412,24 @@ function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStat
                 {formatDate(video.created_at)}
               </span>
             </div>
+            {/* Detected players */}
+            {detectedPlayersList.length > 0 && (
+              <div className="flex items-center gap-1 mt-2 flex-wrap">
+                <Users className="w-3 h-3 text-gray-500" />
+                {detectedPlayersList.slice(0, 5).map(player => (
+                  <span
+                    key={player.id}
+                    className="inline-flex items-center gap-1 bg-gray-700 px-1.5 py-0.5 rounded text-xs"
+                  >
+                    {player.number && <span className="font-bold text-blue-400">{player.number}</span>}
+                    <span className="text-gray-300">{player.name.split(' ')[0]}</span>
+                  </span>
+                ))}
+                {detectedPlayersList.length > 5 && (
+                  <span className="text-xs text-gray-500">+{detectedPlayersList.length - 5}</span>
+                )}
+              </div>
+            )}
           </Link>
 
           {/* Menu */}
@@ -404,12 +468,17 @@ function VideoCard({ video, stats, onDelete }: { video: Video; stats?: VideoStat
   );
 }
 
-function VideoListItem({ video, stats, onDelete }: { video: Video; stats?: VideoStats; onDelete: (id: string) => void }) {
+function VideoListItem({ video, stats, onDelete, detectedPlayers, allPlayers }: { video: Video; stats?: VideoStats; onDelete: (id: string) => void; detectedPlayers?: DetectedPlayersInfo; allPlayers: Player[] }) {
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Get detected players with names
+  const detectedPlayersList = detectedPlayers?.playerIds
+    .map(id => allPlayers.find(p => p.id === id))
+    .filter(Boolean) as Player[] || [];
 
   return (
     <div className="flex items-center gap-4 bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition">
@@ -451,6 +520,13 @@ function VideoListItem({ video, stats, onDelete }: { video: Video; stats?: Video
           {stats && stats.audioCount > 0 && (
             <span className="flex items-center gap-1 text-purple-400" title={`${stats.audioCount} hlasových komentářů`}>
               🎙️ {stats.audioCount}
+            </span>
+          )}
+          {/* Detected players */}
+          {detectedPlayersList.length > 0 && (
+            <span className="flex items-center gap-1 text-blue-400">
+              <Users className="w-3 h-3" />
+              {detectedPlayersList.map(p => p.number || p.name.charAt(0)).join(', ')}
             </span>
           )}
         </div>

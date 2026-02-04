@@ -54,6 +54,7 @@ import {
 } from '@/lib/cloud-store';
 import { getPlayers, Player, addPlayerClip as addPlayerClipLocal } from '@/lib/team-store';
 import { uploadFile, uploadDataUrl } from '@/lib/upload';
+import PlayerDetection from '@/components/PlayerDetection';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'playerMarker';
 
@@ -1568,6 +1569,16 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           </div>
         </div>
       </div>
+
+      {/* Player Detection Section */}
+      {video.file_url && (
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 12px' }}>
+          <PlayerDetection
+            videoId={params.id}
+            videoUrl={video.file_url}
+          />
+        </div>
+      )}
 
       {/* Screenshots Section */}
       {screenshots.length > 0 && (

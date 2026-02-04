@@ -173,13 +173,19 @@ export const OPPONENT_TEAMS = [
 
 // Seznam hráčů SK Slatina 2017
 const DEFAULT_PLAYERS: Player[] = [
-  { id: 'p1', name: 'Batu', number: 1, active: true },
-  { id: 'p2', name: 'Míša', number: 2, active: true },
-  { id: 'p3', name: 'Filip', number: 3, active: true },
-  { id: 'p4', name: 'Hugo', number: 4, active: true },
-  { id: 'p5', name: 'Tomáš', number: 5, active: true },
-  { id: 'p6', name: 'Honza', number: 6, active: true },
-  { id: 'p7', name: 'Andri', number: 7, active: true },
+  { id: 'p1', name: 'Tom Frank', number: 1, active: true }, // také 15
+  { id: 'p2', name: 'Míša Nguyen', number: 2, active: true },
+  { id: 'p3', name: 'Domča Handl', number: 3, active: true },
+  { id: 'p6', name: 'Adri Do', number: 6, active: true },
+  { id: 'p7', name: 'Aďa Štěpán', number: 7, active: true },
+  { id: 'p8', name: 'Míša Baturko', number: 8, active: true },
+  { id: 'p9', name: 'Patrik Beneš', number: 9, active: true },
+  { id: 'p10', name: 'Honza Joura', number: 10, active: true },
+  { id: 'p11', name: 'Filip Braun', number: 11, active: true },
+  { id: 'p12', name: 'Hugo Heger', number: 12, active: true },
+  { id: 'p13', name: 'Lukáš Hrdlička', active: true },
+  { id: 'p14', name: 'Jindra Tomsa', active: true },
+  { id: 'p15', name: 'David Peterka', active: true },
 ];
 
 // Team configuration
