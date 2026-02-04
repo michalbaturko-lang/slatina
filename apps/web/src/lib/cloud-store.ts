@@ -191,16 +191,24 @@ export async function updatePlayer(id: string, updates: Partial<Player>): Promis
 
 export async function getVideos(): Promise<Video[]> {
   if (!isProductionMode()) {
+    console.log('[getVideos] Using localStorage (dev mode)');
     const data = localStorage.getItem('slatina-videos');
-    return data ? JSON.parse(data) : [];
+    const videos = data ? JSON.parse(data) : [];
+    console.log(`[getVideos] Found ${videos.length} videos in localStorage`);
+    return videos;
   }
 
+  console.log('[getVideos] Using Supabase (production mode)');
   const { data, error } = await supabase
     .from('videos')
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    console.error('[getVideos] Supabase error:', error);
+    throw error;
+  }
+  console.log(`[getVideos] Found ${data?.length || 0} videos in Supabase`);
   return data || [];
 }
 

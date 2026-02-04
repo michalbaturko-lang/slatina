@@ -38,6 +38,7 @@ export default function VideosPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMatch, setFilterMatch] = useState<string>('all');
@@ -54,6 +55,7 @@ export default function VideosPage() {
 
   const loadVideos = async () => {
     try {
+      setLoadError(null);
       const [storedVideos, storedMatches] = await Promise.all([
         getVideos(),
         getMatches(),
@@ -93,6 +95,7 @@ export default function VideosPage() {
       setVideoStats(stats);
     } catch (error) {
       console.error('Failed to load videos:', error);
+      setLoadError(error instanceof Error ? error.message : 'Nepodařilo se načíst videa');
     } finally {
       setLoading(false);
     }
@@ -164,6 +167,27 @@ export default function VideosPage() {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-4">
+        <div className="text-red-400 text-center">
+          <p className="text-xl mb-2">Chyba při načítání videí</p>
+          <p className="text-sm text-gray-400">{loadError}</p>
+        </div>
+        <button
+          onClick={() => {
+            setLoadError(null);
+            setLoading(true);
+            loadVideos();
+          }}
+          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
+        >
+          Zkusit znovu
+        </button>
       </div>
     );
   }
