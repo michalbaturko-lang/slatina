@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment } from '@/lib/cloud-store';
 import { getPlayers, Player } from '@/lib/team-store';
-import { getVideoPlayers, VideoPlayersData } from '@/lib/player-detection';
+import { getVideoPlayers, VideoPlayersData, detectPlayersFromVideoUrl, savePlayersForVideo } from '@/lib/player-detection';
 
 interface VideoStats {
   commentCount: number;
@@ -48,6 +48,11 @@ export default function VideosPage() {
   const [videoStats, setVideoStats] = useState<Record<string, VideoStats>>({});
   const [players, setPlayers] = useState<Player[]>([]);
   const [videoPlayersData, setVideoPlayersData] = useState<VideoPlayersData>({});
+
+  // Bulk detection state
+  const [isDetectingAll, setIsDetectingAll] = useState(false);
+  const [detectionProgress, setDetectionProgress] = useState({ current: 0, total: 0, currentVideo: '' });
+  const [detectionResults, setDetectionResults] = useState<{ success: number; failed: number; skipped: number }>({ success: 0, failed: 0, skipped: 0 });
 
   useEffect(() => {
     loadVideos();
@@ -106,6 +111,75 @@ export default function VideosPage() {
     if (!matchId) return null;
     const match = matches.find(m => m.id === matchId);
     return match?.name || null;
+  };
+
+  // Bulk detection - detect players in all videos without detection
+  const runBulkDetection = async () => {
+    // Find videos without detection
+    const videosToDetect = videos.filter(v => !videoPlayersData[v.id]);
+
+    if (videosToDetect.length === 0) {
+      alert('Všechna videa již mají detekci hráčů.');
+      return;
+    }
+
+    if (!confirm(`Spustit detekci pro ${videosToDetect.length} videí? Toto může trvat delší dobu.`)) {
+      return;
+    }
+
+    setIsDetectingAll(true);
+    setDetectionProgress({ current: 0, total: videosToDetect.length, currentVideo: '' });
+    setDetectionResults({ success: 0, failed: 0, skipped: 0 });
+
+    const results = { success: 0, failed: 0, skipped: 0 };
+    const updatedVideoPlayers = { ...videoPlayersData };
+
+    for (let i = 0; i < videosToDetect.length; i++) {
+      const video = videosToDetect[i];
+      setDetectionProgress({ current: i + 1, total: videosToDetect.length, currentVideo: video.title });
+
+      try {
+        // Skip if no video URL
+        if (!video.file_url) {
+          results.skipped++;
+          continue;
+        }
+
+        // Run detection
+        const result = await detectPlayersFromVideoUrl(video.file_url);
+
+        // Save results
+        savePlayersForVideo(video.id, result);
+        updatedVideoPlayers[video.id] = {
+          playerIds: result.players.map(p => p.id),
+          numbers: result.numbers,
+          confidence: result.confidence,
+          detectedAt: result.detectedAt,
+        };
+
+        results.success++;
+        setDetectionResults({ ...results });
+
+        // Wait 3 seconds between requests to avoid rate limiting
+        if (i < videosToDetect.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      } catch (err) {
+        console.error(`Failed to detect players in video ${video.id}:`, err);
+        results.failed++;
+        setDetectionResults({ ...results });
+
+        // If rate limited, wait longer
+        if (err instanceof Error && err.message.includes('429')) {
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        }
+      }
+    }
+
+    setVideoPlayersData(updatedVideoPlayers);
+    setIsDetectingAll(false);
+
+    alert(`Detekce dokončena!\n✅ Úspěšně: ${results.success}\n❌ Chyba: ${results.failed}\n⏭️ Přeskočeno: ${results.skipped}`);
   };
 
   const handleDeleteVideo = async (id: string) => {
@@ -318,6 +392,52 @@ export default function VideosPage() {
             </button>
           </div>
         </div>
+
+        {/* Bulk Detection */}
+        {isDetectingAll ? (
+          <div className="mb-6 p-4 bg-blue-900/30 border border-blue-700 rounded-lg">
+            <div className="flex items-center gap-3 mb-2">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+              <span className="font-medium">Detekce hráčů probíhá...</span>
+              <span className="text-gray-400">({detectionProgress.current}/{detectionProgress.total})</span>
+            </div>
+            <p className="text-sm text-gray-400 mb-2 truncate">
+              Aktuálně: {detectionProgress.currentVideo}
+            </p>
+            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all"
+                style={{ width: `${(detectionProgress.current / detectionProgress.total) * 100}%` }}
+              />
+            </div>
+            <div className="flex gap-4 text-sm">
+              <span className="text-green-400">✓ {detectionResults.success}</span>
+              <span className="text-red-400">✗ {detectionResults.failed}</span>
+              <span className="text-gray-400">⏭ {detectionResults.skipped}</span>
+            </div>
+          </div>
+        ) : (
+          (() => {
+            const undetectedCount = videos.filter(v => !videoPlayersData[v.id]).length;
+            return undetectedCount > 0 ? (
+              <div className="mb-6 p-4 bg-gray-800 border border-gray-700 rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Users className="w-5 h-5 text-yellow-500" />
+                  <span>
+                    <strong>{undetectedCount}</strong> videí bez detekce hráčů
+                  </span>
+                </div>
+                <button
+                  onClick={runBulkDetection}
+                  className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg transition"
+                >
+                  <Users className="w-4 h-4" />
+                  Detekovat vše
+                </button>
+              </div>
+            ) : null;
+          })()
+        )}
 
         {/* Videos */}
         {filteredAndSortedVideos.length === 0 ? (
