@@ -301,6 +301,13 @@ export const FORMATIONS: Record<string, string[]> = {
 
 // === PLAYER MANAGEMENT ===
 
+// Force reset players to default (useful when roster changes)
+export function resetPlayersToDefault(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(PLAYERS_KEY);
+  }
+}
+
 export function getPlayers(): Player[] {
   if (typeof window === 'undefined') return DEFAULT_PLAYERS;
   const data = localStorage.getItem(PLAYERS_KEY);

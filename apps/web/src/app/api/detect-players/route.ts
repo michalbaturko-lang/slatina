@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       type: 'image_url' as const,
       image_url: {
         url: img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`,
-        detail: 'low' as const, // Use low detail to reduce costs
+        detail: 'high' as const, // Use high detail for better number recognition
       },
     }));
 

@@ -17,6 +17,7 @@ import {
   getPlayers,
   Player,
   getTeam,
+  resetPlayersToDefault,
 } from '@/lib/team-store';
 
 // Simplified stats for now - will be computed from cloud data
@@ -91,6 +92,25 @@ export default function PlayersPage() {
               </div>
             </div>
           </div>
+          <button
+            onClick={() => {
+              if (confirm('Resetovat seznam hráčů na aktuální soupisku?')) {
+                resetPlayersToDefault();
+                window.location.reload();
+              }
+            }}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#374151',
+              border: 'none',
+              borderRadius: 8,
+              color: '#9ca3af',
+              cursor: 'pointer',
+              fontSize: 12,
+            }}
+          >
+            Resetovat soupisku
+          </button>
         </div>
       </header>
 

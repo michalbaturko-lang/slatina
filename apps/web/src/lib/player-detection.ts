@@ -16,8 +16,8 @@ export interface DetectionResult {
  */
 export async function extractFramesFromVideo(
   videoElement: HTMLVideoElement,
-  numFrames: number = 8,
-  quality: number = 0.7
+  numFrames: number = 12,
+  quality: number = 0.85
 ): Promise<string[]> {
   const frames: string[] = [];
   const duration = videoElement.duration;
@@ -33,15 +33,15 @@ export async function extractFramesFromVideo(
     throw new Error('Could not get canvas context');
   }
 
-  // Set canvas size (reduce for faster processing)
-  const maxWidth = 640;
+  // Set canvas size - higher resolution for better number detection
+  const maxWidth = 1280;
   const scale = Math.min(1, maxWidth / videoElement.videoWidth);
   canvas.width = videoElement.videoWidth * scale;
   canvas.height = videoElement.videoHeight * scale;
 
-  // Calculate frame times (skip first and last 10% of video)
-  const startTime = duration * 0.1;
-  const endTime = duration * 0.9;
+  // Calculate frame times (skip first and last 5% of video for better coverage)
+  const startTime = duration * 0.05;
+  const endTime = duration * 0.95;
   const interval = (endTime - startTime) / (numFrames - 1);
 
   for (let i = 0; i < numFrames; i++) {
