@@ -70,12 +70,16 @@ export async function extractFramesFromVideo(
   const startTime = Math.min(1, duration * 0.05); // Start at 1 second or 5% of video
   const maxEndTime = duration - 1; // End 1 second before the end
 
+  // Add random offset (up to half the interval) so "Znovu" gives different frames
+  const randomOffset = Math.random() * (frameInterval / 2);
+
   for (let i = 0; i < actualNumFrames; i++) {
-    let time = startTime + (frameInterval * i);
+    let time = startTime + randomOffset + (frameInterval * i);
     // Make sure we don't exceed the video duration
     if (time > maxEndTime) {
-      time = maxEndTime;
+      time = maxEndTime - Math.random() * 2; // Random position near end
     }
+    if (time < 0) time = 0;
 
     // Seek to time
     videoElement.currentTime = time;
