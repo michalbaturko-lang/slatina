@@ -12,11 +12,33 @@ export interface DetectionResult {
 }
 
 /**
+ * Calculate optimal frame extraction parameters based on video duration
+ */
+function getFrameExtractionParams(duration: number): { numFrames: number; interval: number } {
+  if (duration <= 10) {
+    // Up to 10 seconds: 5 frames, ~2 seconds apart
+    return { numFrames: 5, interval: 2 };
+  } else if (duration <= 30) {
+    // Up to 30 seconds: 10 frames, ~3 seconds apart
+    return { numFrames: 10, interval: 3 };
+  } else if (duration <= 60) {
+    // Up to 60 seconds: 10 frames, ~6 seconds apart
+    return { numFrames: 10, interval: 6 };
+  } else if (duration <= 120) {
+    // Up to 2 minutes: 10 frames, ~12 seconds apart
+    return { numFrames: 10, interval: 12 };
+  } else {
+    // Longer videos: 10 frames evenly distributed
+    return { numFrames: 10, interval: duration / 10 };
+  }
+}
+
+/**
  * Extract frames from a video element at regular intervals
  */
 export async function extractFramesFromVideo(
   videoElement: HTMLVideoElement,
-  numFrames: number = 12,
+  numFrames?: number,
   quality: number = 0.85
 ): Promise<string[]> {
   const frames: string[] = [];
@@ -25,6 +47,11 @@ export async function extractFramesFromVideo(
   if (!duration || duration <= 0) {
     throw new Error('Video has no duration');
   }
+
+  // Get optimal parameters based on video duration
+  const params = getFrameExtractionParams(duration);
+  const actualNumFrames = numFrames || params.numFrames;
+  const frameInterval = params.interval;
 
   // Create canvas for capturing frames
   const canvas = document.createElement('canvas');
@@ -39,13 +66,16 @@ export async function extractFramesFromVideo(
   canvas.width = videoElement.videoWidth * scale;
   canvas.height = videoElement.videoHeight * scale;
 
-  // Calculate frame times (skip first and last 5% of video for better coverage)
-  const startTime = duration * 0.05;
-  const endTime = duration * 0.95;
-  const interval = (endTime - startTime) / (numFrames - 1);
+  // Calculate frame times using the interval
+  const startTime = Math.min(1, duration * 0.05); // Start at 1 second or 5% of video
+  const maxEndTime = duration - 1; // End 1 second before the end
 
-  for (let i = 0; i < numFrames; i++) {
-    const time = startTime + (interval * i);
+  for (let i = 0; i < actualNumFrames; i++) {
+    let time = startTime + (frameInterval * i);
+    // Make sure we don't exceed the video duration
+    if (time > maxEndTime) {
+      time = maxEndTime;
+    }
 
     // Seek to time
     videoElement.currentTime = time;

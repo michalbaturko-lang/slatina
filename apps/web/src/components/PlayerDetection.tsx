@@ -358,9 +358,13 @@ export default function PlayerDetection({ videoId, videoUrl, onPlayersDetected }
                 </div>
               ))}
             </div>
-          ) : !isDetecting && !error ? (
+          ) : !isDetecting && !error && !hasExistingDetection ? (
             <p style={{ fontSize: 13, color: '#9ca3af' }}>
-              Zatím nebyli detekováni žádní hráči. Klikněte na "Detekovat" pro automatické rozpoznání čísel na dresech.
+              Klikněte na tlačítko vpravo pro automatické rozpoznání hráčů z videa.
+            </p>
+          ) : !isDetecting && !error && hasExistingDetection && detectedPlayers.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#9ca3af' }}>
+              Nebyli rozpoznáni žádní hráči. Zkuste kliknout na "Znovu" nebo upravte ručně.
             </p>
           ) : null}
 
