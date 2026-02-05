@@ -309,10 +309,44 @@ export function resetPlayersToDefault(): void {
   }
 }
 
+/**
+ * Ensure player numbers match the authoritative roster.
+ * Runs on every getPlayers() call but only writes if something changed.
+ */
+function migratePlayerNumbers(players: Player[]): Player[] {
+  const correctNumbers: Record<string, number | undefined> = {};
+  for (const dp of DEFAULT_PLAYERS) {
+    correctNumbers[dp.id] = dp.number;
+  }
+
+  let changed = false;
+  const fixed = players.map(p => {
+    if (p.id in correctNumbers && p.number !== correctNumbers[p.id]) {
+      changed = true;
+      return { ...p, number: correctNumbers[p.id] };
+    }
+    return p;
+  });
+
+  // Also ensure any missing default players are added
+  for (const dp of DEFAULT_PLAYERS) {
+    if (!fixed.find(p => p.id === dp.id)) {
+      fixed.push(dp);
+      changed = true;
+    }
+  }
+
+  if (changed && typeof window !== 'undefined') {
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(fixed));
+  }
+  return fixed;
+}
+
 export function getPlayers(): Player[] {
   if (typeof window === 'undefined') return DEFAULT_PLAYERS;
   const data = localStorage.getItem(PLAYERS_KEY);
-  return data ? JSON.parse(data) : DEFAULT_PLAYERS;
+  const players = data ? JSON.parse(data) : DEFAULT_PLAYERS;
+  return migratePlayerNumbers(players);
 }
 
 export function savePlayers(players: Player[]): void {
