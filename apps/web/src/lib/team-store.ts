@@ -309,65 +309,22 @@ export function resetPlayersToDefault(): void {
   }
 }
 
-const MIGRATION_VERSION_KEY = 'slatina-players-migration-v';
-const CURRENT_MIGRATION = 1; // Increment when roster changes
-
-/**
- * Ensure player numbers match the authoritative roster.
- * Only runs once per migration version. Backs up data before changing.
- * NEVER touches photoUrl, introVideoUrl or other custom fields.
- */
-function migratePlayerNumbers(players: Player[]): Player[] {
-  if (typeof window === 'undefined') return players;
-
-  // Check if migration already ran
-  const lastMigration = parseInt(localStorage.getItem(MIGRATION_VERSION_KEY) || '0', 10);
-  if (lastMigration >= CURRENT_MIGRATION) return players;
-
-  // Build lookup from DEFAULT_PLAYERS
-  const defaultById: Record<string, Player> = {};
-  for (const dp of DEFAULT_PLAYERS) {
-    defaultById[dp.id] = dp;
-  }
-
-  // Backup current data before any changes
-  localStorage.setItem('slatina-players-backup', JSON.stringify(players));
-
-  let changed = false;
-  const fixed = players.map(p => {
-    const def = defaultById[p.id];
-    if (def && p.number !== def.number) {
-      console.log(`[migration] Fixing ${p.name}: #${p.number} → #${def.number}`);
-      changed = true;
-      // ONLY update number, preserve everything else
-      return { ...p, number: def.number };
-    }
-    return p;
-  });
-
-  // Add missing default players (without overwriting existing ones)
-  for (const dp of DEFAULT_PLAYERS) {
-    if (!fixed.find(p => p.id === dp.id)) {
-      console.log(`[migration] Adding missing player: ${dp.name}`);
-      fixed.push(dp);
-      changed = true;
-    }
-  }
-
-  // Save and mark migration as done
-  if (changed) {
-    localStorage.setItem(PLAYERS_KEY, JSON.stringify(fixed));
-  }
-  localStorage.setItem(MIGRATION_VERSION_KEY, String(CURRENT_MIGRATION));
-
-  return fixed;
-}
+const ROSTER_VERSION_KEY = 'slatina-roster-version';
+const CURRENT_ROSTER_VERSION = 2; // Force clean reset
 
 export function getPlayers(): Player[] {
   if (typeof window === 'undefined') return DEFAULT_PLAYERS;
+
+  const rosterVersion = parseInt(localStorage.getItem(ROSTER_VERSION_KEY) || '0', 10);
+  if (rosterVersion < CURRENT_ROSTER_VERSION) {
+    // Force clean reset to authoritative roster
+    localStorage.setItem(PLAYERS_KEY, JSON.stringify(DEFAULT_PLAYERS));
+    localStorage.setItem(ROSTER_VERSION_KEY, String(CURRENT_ROSTER_VERSION));
+    return DEFAULT_PLAYERS;
+  }
+
   const data = localStorage.getItem(PLAYERS_KEY);
-  const players = data ? JSON.parse(data) : DEFAULT_PLAYERS;
-  return migratePlayerNumbers(players);
+  return data ? JSON.parse(data) : DEFAULT_PLAYERS;
 }
 
 export function savePlayers(players: Player[]): void {
