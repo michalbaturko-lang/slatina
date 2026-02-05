@@ -237,11 +237,43 @@ export interface VideoPlayersData {
 
 /**
  * Get all video-player associations
+ * Re-maps playerIds from jersey numbers to ensure they match current roster
  */
 export function getVideoPlayers(): VideoPlayersData {
   if (typeof window === 'undefined') return {};
   const data = localStorage.getItem(VIDEO_PLAYERS_KEY);
-  return data ? JSON.parse(data) : {};
+  if (!data) return {};
+
+  const parsed: VideoPlayersData = JSON.parse(data);
+  const allPlayers = getPlayers();
+
+  // Re-derive playerIds from numbers to match current roster IDs
+  let changed = false;
+  for (const videoId of Object.keys(parsed)) {
+    const entry = parsed[videoId];
+    if (!entry.numbers || entry.numbers.length === 0) continue;
+
+    const correctIds = entry.numbers
+      .map(num => allPlayers.find(p => p.number === num))
+      .filter(Boolean)
+      .map(p => p!.id);
+
+    // Check if IDs need updating
+    const currentIds = entry.playerIds || [];
+    if (correctIds.length > 0 && (
+      correctIds.length !== currentIds.length ||
+      correctIds.some(id => !currentIds.includes(id))
+    )) {
+      parsed[videoId] = { ...entry, playerIds: correctIds };
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    localStorage.setItem(VIDEO_PLAYERS_KEY, JSON.stringify(parsed));
+  }
+
+  return parsed;
 }
 
 /**
