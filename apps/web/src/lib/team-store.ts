@@ -21,6 +21,7 @@ export interface Player {
   position?: string;
   active: boolean;
   photoUrl?: string;
+  introVideoUrl?: string;
 }
 
 // Player photo in gallery

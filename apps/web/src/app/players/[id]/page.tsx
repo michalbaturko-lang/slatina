@@ -12,6 +12,10 @@ import {
   ChevronRight,
   Upload,
   X,
+  Play,
+  VolumeX,
+  Volume2,
+  Film,
 } from 'lucide-react';
 import {
   getPlayers,
@@ -26,7 +30,7 @@ import {
 } from '@/lib/team-store';
 import { getVideoIdsWithPlayer } from '@/lib/player-detection';
 import { getVideos, Video as VideoType, getVideoIdsWithPlayerRating, getRatingsForPlayer, VideoRating, getMatches as getMatchesCloud, Match as MatchCloud } from '@/lib/cloud-store';
-import { uploadDataUrl } from '@/lib/upload';
+import { uploadDataUrl, uploadFile } from '@/lib/upload';
 
 export default function PlayerDetailPage({ params }: { params: { id: string } }) {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -49,6 +53,12 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
   const [showPhotoZoom, setShowPhotoZoom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  // Intro video
+  const introVideoRef = useRef<HTMLVideoElement>(null);
+  const [introMuted, setIntroMuted] = useState(true);
+  const [uploadingIntroVideo, setUploadingIntroVideo] = useState(false);
+  const introVideoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadPlayerData();
@@ -131,6 +141,32 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     }
   };
 
+  const handleIntroVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !player) return;
+
+    setUploadingIntroVideo(true);
+    try {
+      const result = await uploadFile(file, 'videos', `intro-${player.id}-${Date.now()}.mp4`);
+      const updated = updatePlayer(player.id, { introVideoUrl: result.publicUrl });
+      if (updated) {
+        setPlayer(updated);
+      }
+    } catch (err) {
+      console.error('Failed to upload intro video:', err);
+      alert('Nepodařilo se nahrát video');
+    } finally {
+      setUploadingIntroVideo(false);
+    }
+  };
+
+  const removeIntroVideo = () => {
+    if (!player) return;
+    if (!confirm('Odebrat intro video?')) return;
+    const updated = updatePlayer(player.id, { introVideoUrl: undefined });
+    if (updated) setPlayer(updated);
+  };
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('cs-CZ', {
       day: 'numeric',
@@ -202,6 +238,162 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
       </header>
 
       <main style={{ maxWidth: 800, margin: '0 auto', padding: 16 }}>
+        {/* Intro Video Hero */}
+        {player.introVideoUrl ? (
+          <div style={{
+            position: 'relative',
+            borderRadius: 16,
+            overflow: 'hidden',
+            marginBottom: 16,
+            backgroundColor: '#000',
+            maxHeight: 500,
+          }}>
+            <video
+              ref={introVideoRef}
+              src={player.introVideoUrl}
+              autoPlay
+              loop
+              muted={introMuted}
+              playsInline
+              style={{
+                width: '100%',
+                maxHeight: 500,
+                objectFit: 'cover',
+                display: 'block',
+              }}
+            />
+            {/* Gradient overlay at bottom */}
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '50%',
+              background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+              pointerEvents: 'none',
+            }} />
+            {/* Player info overlay */}
+            <div style={{
+              position: 'absolute',
+              bottom: 16,
+              left: 20,
+              right: 20,
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                {player.number && (
+                  <div style={{
+                    fontSize: 48,
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    color: 'white',
+                    textShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                    opacity: 0.4,
+                  }}>
+                    #{player.number}
+                  </div>
+                )}
+                <div style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'white',
+                  textShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                }}>
+                  {player.name}
+                </div>
+                {player.position && (
+                  <div style={{
+                    fontSize: 13,
+                    color: '#d1d5db',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                  }}>
+                    {player.position}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => {
+                    setIntroMuted(!introMuted);
+                    if (introVideoRef.current) {
+                      introVideoRef.current.muted = !introMuted;
+                    }
+                  }}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {introMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                </button>
+                <button
+                  onClick={removeIntroVideo}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Upload intro video prompt */
+          <div style={{
+            borderRadius: 16,
+            border: '2px dashed #374151',
+            padding: '20px 16px',
+            marginBottom: 16,
+            textAlign: 'center',
+            cursor: 'pointer',
+          }}
+          onClick={() => introVideoInputRef.current?.click()}
+          >
+            {uploadingIntroVideo ? (
+              <div style={{ color: '#9ca3af' }}>
+                <Film size={24} style={{ margin: '0 auto 8px', display: 'block' }} />
+                Nahrávání videa...
+              </div>
+            ) : (
+              <div style={{ color: '#6b7280' }}>
+                <Film size={24} style={{ margin: '0 auto 8px', display: 'block' }} />
+                <div style={{ fontSize: 13 }}>Nahrát intro video hráče</div>
+                <div style={{ fontSize: 11, marginTop: 4 }}>Krátké představení / rozhýbaná fotka</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Hidden file input for intro video */}
+        <input
+          ref={introVideoInputRef}
+          type="file"
+          accept="video/*"
+          style={{ display: 'none' }}
+          onChange={handleIntroVideoUpload}
+        />
+
         {/* Player Card */}
         <div style={{
           backgroundColor: '#1f2937',
