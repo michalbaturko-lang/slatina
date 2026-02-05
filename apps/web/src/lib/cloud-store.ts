@@ -198,17 +198,28 @@ export async function getVideos(): Promise<Video[]> {
     return videos;
   }
 
+  if (!supabase) {
+    console.error('[getVideos] Supabase client is null despite production mode!');
+    throw new Error('Supabase připojení selhalo - klient nebyl inicializován');
+  }
+
   console.log('[getVideos] Using Supabase (production mode)');
-  const { data, error } = await supabase
+  const { data, error, status, statusText } = await supabase
     .from('videos')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('[getVideos] Supabase error:', error);
-    throw error;
+    console.error('[getVideos] Supabase error:', error, 'status:', status, statusText);
+    throw new Error(`Chyba databáze: ${error.message} (${status})`);
   }
-  console.log(`[getVideos] Found ${data?.length || 0} videos in Supabase`);
+
+  console.log(`[getVideos] Found ${data?.length || 0} videos in Supabase (status: ${status})`);
+
+  if (!data || data.length === 0) {
+    console.warn('[getVideos] WARNING: Supabase returned 0 videos. Status:', status, statusText);
+  }
+
   return data || [];
 }
 
