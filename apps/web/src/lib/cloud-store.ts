@@ -189,38 +189,95 @@ export async function updatePlayer(id: string, updates: Partial<Player>): Promis
 // VIDEOS
 // ============================================
 
+const VIDEOS_CACHE_KEY = 'slatina-videos-cache';
+const MATCHES_CACHE_KEY = 'slatina-matches-cache';
+
+/**
+ * Helper: retry a Supabase query with exponential backoff
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  label: string = ''
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const waitMs = Math.pow(2, attempt) * 1000; // 1s, 2s
+        console.log(`[${label}] Retry ${attempt + 1}/${maxRetries} after ${waitMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function getVideos(): Promise<Video[]> {
   if (!isProductionMode()) {
-    console.log('[getVideos] Using localStorage (dev mode)');
     const data = localStorage.getItem('slatina-videos');
-    const videos = data ? JSON.parse(data) : [];
-    console.log(`[getVideos] Found ${videos.length} videos in localStorage`);
-    return videos;
+    return data ? JSON.parse(data) : [];
   }
 
   if (!supabase) {
-    console.error('[getVideos] Supabase client is null despite production mode!');
-    throw new Error('Supabase připojení selhalo - klient nebyl inicializován');
+    console.error('[getVideos] Supabase client is null!');
+    // Fallback to cache
+    const cached = typeof window !== 'undefined' ? localStorage.getItem(VIDEOS_CACHE_KEY) : null;
+    if (cached) {
+      console.log('[getVideos] Using cached data as fallback');
+      return JSON.parse(cached);
+    }
+    throw new Error('Supabase připojení selhalo');
   }
 
-  console.log('[getVideos] Using Supabase (production mode)');
-  const { data, error, status, statusText } = await supabase
-    .from('videos')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const videos = await withRetry(async () => {
+      const { data, error, status } = await supabase
+        .from('videos')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('[getVideos] Supabase error:', error, 'status:', status, statusText);
-    throw new Error(`Chyba databáze: ${error.message} (${status})`);
+      if (error) {
+        throw new Error(`Chyba databáze: ${error.message} (${status})`);
+      }
+      return data || [];
+    }, 2, 'getVideos');
+
+    // Cache successful results for fallback
+    if (videos.length > 0 && typeof window !== 'undefined') {
+      localStorage.setItem(VIDEOS_CACHE_KEY, JSON.stringify(videos));
+    }
+
+    // If Supabase returned 0 but we have cache, use cache
+    if (videos.length === 0 && typeof window !== 'undefined') {
+      const cached = localStorage.getItem(VIDEOS_CACHE_KEY);
+      if (cached) {
+        const cachedVideos = JSON.parse(cached);
+        if (cachedVideos.length > 0) {
+          console.warn('[getVideos] Supabase returned 0 videos, using cache with', cachedVideos.length, 'videos');
+          return cachedVideos;
+        }
+      }
+    }
+
+    return videos;
+  } catch (err) {
+    // On complete failure, try cache
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(VIDEOS_CACHE_KEY);
+      if (cached) {
+        const cachedVideos = JSON.parse(cached);
+        if (cachedVideos.length > 0) {
+          console.warn('[getVideos] Using cached data after error:', err);
+          return cachedVideos;
+        }
+      }
+    }
+    throw err;
   }
-
-  console.log(`[getVideos] Found ${data?.length || 0} videos in Supabase (status: ${status})`);
-
-  if (!data || data.length === 0) {
-    console.warn('[getVideos] WARNING: Supabase returned 0 videos. Status:', status, statusText);
-  }
-
-  return data || [];
 }
 
 export async function getVideo(id: string): Promise<Video | null> {
@@ -441,13 +498,42 @@ export async function getMatches(): Promise<Match[]> {
     return data ? JSON.parse(data) : [];
   }
 
-  const { data, error } = await supabase
-    .from('matches')
-    .select('*')
-    .order('date', { ascending: false });
+  if (!supabase) {
+    const cached = typeof window !== 'undefined' ? localStorage.getItem(MATCHES_CACHE_KEY) : null;
+    return cached ? JSON.parse(cached) : [];
+  }
 
-  if (error) throw error;
-  return data || [];
+  try {
+    const matches = await withRetry(async () => {
+      const { data, error } = await supabase
+        .from('matches')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    }, 2, 'getMatches');
+
+    if (matches.length > 0 && typeof window !== 'undefined') {
+      localStorage.setItem(MATCHES_CACHE_KEY, JSON.stringify(matches));
+    }
+
+    if (matches.length === 0 && typeof window !== 'undefined') {
+      const cached = localStorage.getItem(MATCHES_CACHE_KEY);
+      if (cached) {
+        const cachedMatches = JSON.parse(cached);
+        if (cachedMatches.length > 0) return cachedMatches;
+      }
+    }
+
+    return matches;
+  } catch (err) {
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(MATCHES_CACHE_KEY);
+      if (cached) return JSON.parse(cached);
+    }
+    throw err;
+  }
 }
 
 export async function getMatch(id: string): Promise<Match | null> {

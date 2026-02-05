@@ -23,7 +23,6 @@ import {
   Filter,
 } from 'lucide-react';
 import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment, updateVideo } from '@/lib/cloud-store';
-import { isProductionMode } from '@/lib/supabase';
 import { getPlayers, Player } from '@/lib/team-store';
 import { getVideoPlayers, VideoPlayersData, detectPlayersFromVideoUrl, savePlayersForVideo } from '@/lib/player-detection';
 import { uploadDataUrl } from '@/lib/upload';
@@ -354,17 +353,12 @@ export default function VideosPage() {
     );
   }
 
-  if (loadError || (!loading && videos.length === 0 && isProductionMode())) {
+  if (loadError) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-4">
         <div className="text-red-400 text-center">
-          <p className="text-xl mb-2">{loadError ? 'Chyba při načítání videí' : 'Žádná videa nenačtena'}</p>
-          <p className="text-sm text-gray-400 mb-2">
-            {loadError || 'Databáze vrátila 0 videí. Možný problém s připojením k Supabase.'}
-          </p>
-          <p className="text-xs text-gray-500">
-            Režim: {isProductionMode() ? 'Supabase (production)' : 'localStorage (demo)'}
-          </p>
+          <p className="text-xl mb-2">Chyba při načítání videí</p>
+          <p className="text-sm text-gray-400">{loadError}</p>
         </div>
         <button
           onClick={() => {
