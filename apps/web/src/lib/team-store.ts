@@ -309,36 +309,57 @@ export function resetPlayersToDefault(): void {
   }
 }
 
+const MIGRATION_VERSION_KEY = 'slatina-players-migration-v';
+const CURRENT_MIGRATION = 1; // Increment when roster changes
+
 /**
  * Ensure player numbers match the authoritative roster.
- * Runs on every getPlayers() call but only writes if something changed.
+ * Only runs once per migration version. Backs up data before changing.
+ * NEVER touches photoUrl, introVideoUrl or other custom fields.
  */
 function migratePlayerNumbers(players: Player[]): Player[] {
-  const correctNumbers: Record<string, number | undefined> = {};
+  if (typeof window === 'undefined') return players;
+
+  // Check if migration already ran
+  const lastMigration = parseInt(localStorage.getItem(MIGRATION_VERSION_KEY) || '0', 10);
+  if (lastMigration >= CURRENT_MIGRATION) return players;
+
+  // Build lookup from DEFAULT_PLAYERS
+  const defaultById: Record<string, Player> = {};
   for (const dp of DEFAULT_PLAYERS) {
-    correctNumbers[dp.id] = dp.number;
+    defaultById[dp.id] = dp;
   }
+
+  // Backup current data before any changes
+  localStorage.setItem('slatina-players-backup', JSON.stringify(players));
 
   let changed = false;
   const fixed = players.map(p => {
-    if (p.id in correctNumbers && p.number !== correctNumbers[p.id]) {
+    const def = defaultById[p.id];
+    if (def && p.number !== def.number) {
+      console.log(`[migration] Fixing ${p.name}: #${p.number} → #${def.number}`);
       changed = true;
-      return { ...p, number: correctNumbers[p.id] };
+      // ONLY update number, preserve everything else
+      return { ...p, number: def.number };
     }
     return p;
   });
 
-  // Also ensure any missing default players are added
+  // Add missing default players (without overwriting existing ones)
   for (const dp of DEFAULT_PLAYERS) {
     if (!fixed.find(p => p.id === dp.id)) {
+      console.log(`[migration] Adding missing player: ${dp.name}`);
       fixed.push(dp);
       changed = true;
     }
   }
 
-  if (changed && typeof window !== 'undefined') {
+  // Save and mark migration as done
+  if (changed) {
     localStorage.setItem(PLAYERS_KEY, JSON.stringify(fixed));
   }
+  localStorage.setItem(MIGRATION_VERSION_KEY, String(CURRENT_MIGRATION));
+
   return fixed;
 }
 
