@@ -22,9 +22,10 @@ import {
   Camera,
   Filter,
 } from 'lucide-react';
-import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment } from '@/lib/cloud-store';
+import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment, updateVideo } from '@/lib/cloud-store';
 import { getPlayers, Player } from '@/lib/team-store';
 import { getVideoPlayers, VideoPlayersData, detectPlayersFromVideoUrl, savePlayersForVideo } from '@/lib/player-detection';
+import { uploadDataUrl } from '@/lib/upload';
 
 interface VideoStats {
   commentCount: number;
@@ -53,6 +54,11 @@ export default function VideosPage() {
   const [isDetectingAll, setIsDetectingAll] = useState(false);
   const [detectionProgress, setDetectionProgress] = useState({ current: 0, total: 0, currentVideo: '' });
   const [detectionResults, setDetectionResults] = useState<{ success: number; failed: number; skipped: number }>({ success: 0, failed: 0, skipped: 0 });
+
+  // Bulk thumbnail generation state
+  const [isGeneratingThumbs, setIsGeneratingThumbs] = useState(false);
+  const [thumbProgress, setThumbProgress] = useState({ current: 0, total: 0, currentVideo: '' });
+  const [thumbResults, setThumbResults] = useState<{ success: number; failed: number }>({ success: 0, failed: 0 });
 
   useEffect(() => {
     loadVideos();
@@ -180,6 +186,108 @@ export default function VideosPage() {
     setIsDetectingAll(false);
 
     alert(`Detekce dokončena!\n✅ Úspěšně: ${results.success}\n❌ Chyba: ${results.failed}\n⏭️ Přeskočeno: ${results.skipped}`);
+  };
+
+  // Capture a single frame from video URL at given time
+  const captureFrameFromVideo = (videoUrl: string, seekTime: number = 2): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.preload = 'auto';
+
+      const cleanup = () => {
+        video.src = '';
+        video.load();
+      };
+
+      video.onloadedmetadata = () => {
+        // Seek to requested time or 10% of duration (whichever is smaller)
+        const time = Math.min(seekTime, video.duration * 0.1, video.duration - 0.5);
+        video.currentTime = Math.max(0, time);
+      };
+
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(1, 640 / video.videoWidth); // Max 640px wide
+          canvas.width = video.videoWidth * scale;
+          canvas.height = video.videoHeight * scale;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { cleanup(); reject(new Error('No canvas context')); return; }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          cleanup();
+          resolve(dataUrl);
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      };
+
+      video.onerror = () => {
+        cleanup();
+        reject(new Error('Failed to load video'));
+      };
+
+      // Timeout after 15 seconds
+      setTimeout(() => { cleanup(); reject(new Error('Timeout loading video')); }, 15000);
+
+      video.src = videoUrl;
+    });
+  };
+
+  // Bulk thumbnail generation
+  const runBulkThumbnails = async () => {
+    const videosWithoutThumb = videos.filter(v => !v.thumbnail_url && v.file_url);
+
+    if (videosWithoutThumb.length === 0) {
+      alert('Všechna videa již mají náhled.');
+      return;
+    }
+
+    if (!confirm(`Vygenerovat náhledy pro ${videosWithoutThumb.length} videí?`)) {
+      return;
+    }
+
+    setIsGeneratingThumbs(true);
+    setThumbProgress({ current: 0, total: videosWithoutThumb.length, currentVideo: '' });
+    setThumbResults({ success: 0, failed: 0 });
+
+    const results = { success: 0, failed: 0 };
+    const updatedVideos = [...videos];
+
+    for (let i = 0; i < videosWithoutThumb.length; i++) {
+      const video = videosWithoutThumb[i];
+      setThumbProgress({ current: i + 1, total: videosWithoutThumb.length, currentVideo: video.title });
+
+      try {
+        // Capture frame at ~2 seconds
+        const dataUrl = await captureFrameFromVideo(video.file_url);
+
+        // Upload to storage
+        const { publicUrl } = await uploadDataUrl(dataUrl, 'screenshots', `thumb-${video.id}-${Date.now()}.jpg`);
+
+        // Update video record
+        await updateVideo(video.id, { thumbnail_url: publicUrl });
+
+        // Update local state
+        const idx = updatedVideos.findIndex(v => v.id === video.id);
+        if (idx !== -1) updatedVideos[idx] = { ...updatedVideos[idx], thumbnail_url: publicUrl };
+
+        results.success++;
+        setThumbResults({ ...results });
+      } catch (err) {
+        console.error(`Failed to generate thumbnail for ${video.id}:`, err);
+        results.failed++;
+        setThumbResults({ ...results });
+      }
+    }
+
+    setVideos(updatedVideos);
+    setIsGeneratingThumbs(false);
+
+    alert(`Náhledy vygenerovány!\n✅ Úspěšně: ${results.success}\n❌ Chyba: ${results.failed}`);
   };
 
   const handleDeleteVideo = async (id: string) => {
@@ -433,6 +541,52 @@ export default function VideosPage() {
                 >
                   <Users className="w-4 h-4" />
                   Detekovat vše
+                </button>
+              </div>
+            ) : null;
+          })()
+        )}
+
+        {/* Bulk Thumbnail Generation */}
+        {isGeneratingThumbs ? (
+          <div className="mb-6 p-4 bg-purple-900/30 border border-purple-700 rounded-lg">
+            <div className="flex items-center gap-3 mb-2">
+              <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+              <span className="font-medium">Generování náhledů...</span>
+              <span className="text-gray-400">({thumbProgress.current}/{thumbProgress.total})</span>
+            </div>
+            <p className="text-sm text-gray-400 mb-2 truncate">
+              Aktuálně: {thumbProgress.currentVideo}
+            </p>
+            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+              <div
+                className="bg-purple-500 h-2 rounded-full transition-all"
+                style={{ width: `${(thumbProgress.current / thumbProgress.total) * 100}%` }}
+              />
+            </div>
+            <div className="flex gap-4 text-sm">
+              <span className="text-green-400">✓ {thumbResults.success}</span>
+              <span className="text-red-400">✗ {thumbResults.failed}</span>
+            </div>
+          </div>
+        ) : (
+          (() => {
+            const noThumbCount = videos.filter(v => !v.thumbnail_url && v.file_url).length;
+            return noThumbCount > 0 ? (
+              <div className="mb-6 p-4 bg-gray-800 border border-gray-700 rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Camera className="w-5 h-5 text-purple-500" />
+                  <span>
+                    <strong>{noThumbCount}</strong> videí bez náhledu
+                  </span>
+                </div>
+                <button
+                  onClick={runBulkThumbnails}
+                  disabled={isDetectingAll}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-4 py-2 rounded-lg transition"
+                >
+                  <Camera className="w-4 h-4" />
+                  Vygenerovat náhledy
                 </button>
               </div>
             ) : null;
