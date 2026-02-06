@@ -13,6 +13,7 @@ create table players (
   number int,
   position text,
   photo_url text,
+  intro_video_url text,
   active boolean default true,
   created_at timestamptz default now(),
   updated_at timestamptz default now()

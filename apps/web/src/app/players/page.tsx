@@ -14,11 +14,10 @@ import {
   Edit2,
 } from 'lucide-react';
 import {
-  getPlayers,
-  Player,
   getTeam,
   resetPlayersToDefault,
 } from '@/lib/team-store';
+import { getPlayers, Player } from '@/lib/cloud-store';
 
 // Simplified stats for now - will be computed from cloud data
 interface PlayerStats {
@@ -36,9 +35,10 @@ export default function PlayersPage() {
   const team = typeof window !== 'undefined' ? getTeam() : null;
 
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
       try {
-        const playerList = getPlayers();
+        // Load from Supabase (cloud) instead of localStorage
+        const playerList = await getPlayers();
         setPlayers(playerList);
 
         // Initialize empty stats for now - can be enhanced later
@@ -191,9 +191,9 @@ export default function PlayersPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {player.photoUrl ? (
+                  {player.photo_url ? (
                     <img
-                      src={player.photoUrl}
+                      src={player.photo_url}
                       alt={player.name}
                       style={{
                         width: 48,

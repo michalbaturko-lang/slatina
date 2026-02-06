@@ -18,9 +18,6 @@ import {
   Film,
 } from 'lucide-react';
 import {
-  getPlayers,
-  updatePlayer,
-  Player,
   getCommentsForPlayer,
   getMatchesForPlayer,
   getGoalsForPlayer,
@@ -29,7 +26,19 @@ import {
   Match,
 } from '@/lib/team-store';
 import { getVideoIdsWithPlayer } from '@/lib/player-detection';
-import { getVideos, Video as VideoType, getVideoIdsWithPlayerRating, getRatingsForPlayer, VideoRating, getMatches as getMatchesCloud, Match as MatchCloud } from '@/lib/cloud-store';
+import {
+  getPlayers as getPlayersCloud,
+  getPlayer as getPlayerCloud,
+  updatePlayer as updatePlayerCloud,
+  Player,
+  getVideos,
+  Video as VideoType,
+  getVideoIdsWithPlayerRating,
+  getRatingsForPlayer,
+  VideoRating,
+  getMatches as getMatchesCloud,
+  Match as MatchCloud,
+} from '@/lib/cloud-store';
 import { uploadDataUrl, uploadFile } from '@/lib/upload';
 
 export default function PlayerDetailPage({ params }: { params: { id: string } }) {
@@ -66,8 +75,8 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
   const loadPlayerData = async () => {
     try {
-      const players = getPlayers();
-      const foundPlayer = players.find(p => p.id === params.id);
+      // Load player from Supabase (cloud)
+      const foundPlayer = await getPlayerCloud(params.id);
 
       if (!foundPlayer) {
         setError('Hráč nenalezen');
@@ -127,7 +136,8 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
         const dataUrl = event.target?.result as string;
         const filename = `player-${player.id}-${Date.now()}.jpg`;
         const result = await uploadDataUrl(dataUrl, 'photos', filename);
-        const updated = updatePlayer(player.id, { photoUrl: result.publicUrl });
+        // Save to Supabase (cloud) instead of localStorage
+        const updated = await updatePlayerCloud(player.id, { photo_url: result.publicUrl });
         if (updated) {
           setPlayer(updated);
         }
@@ -148,7 +158,8 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     setUploadingIntroVideo(true);
     try {
       const result = await uploadFile(file, 'videos', `intro-${player.id}-${Date.now()}.mp4`);
-      const updated = updatePlayer(player.id, { introVideoUrl: result.publicUrl });
+      // Save to Supabase (cloud) instead of localStorage
+      const updated = await updatePlayerCloud(player.id, { intro_video_url: result.publicUrl });
       if (updated) {
         setPlayer(updated);
       }
@@ -160,10 +171,11 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     }
   };
 
-  const removeIntroVideo = () => {
+  const removeIntroVideo = async () => {
     if (!player) return;
     if (!confirm('Odebrat intro video?')) return;
-    const updated = updatePlayer(player.id, { introVideoUrl: undefined });
+    // Save to Supabase (cloud) instead of localStorage
+    const updated = await updatePlayerCloud(player.id, { intro_video_url: null });
     if (updated) setPlayer(updated);
   };
 
@@ -239,7 +251,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
       <main style={{ maxWidth: 800, margin: '0 auto', padding: 16 }}>
         {/* Intro Video Hero */}
-        {player.introVideoUrl ? (
+        {player.intro_video_url ? (
           <div style={{
             position: 'relative',
             borderRadius: 16,
@@ -250,7 +262,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
           }}>
             <video
               ref={introVideoRef}
-              src={player.introVideoUrl}
+              src={player.intro_video_url}
               autoPlay
               loop
               muted={introMuted}
@@ -407,9 +419,9 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
         }}>
           {/* Photo */}
           <div style={{ position: 'relative' }}>
-            {player.photoUrl ? (
+            {player.photo_url ? (
               <img
-                src={player.photoUrl}
+                src={player.photo_url}
                 alt={player.name}
                 onClick={() => setShowPhotoZoom(true)}
                 style={{
@@ -828,7 +840,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
       )}
 
       {/* Photo Zoom Modal */}
-      {showPhotoZoom && player.photoUrl && (
+      {showPhotoZoom && player.photo_url && (
         <div
           style={{
             position: 'fixed',
@@ -863,7 +875,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
             <X size={24} />
           </button>
           <img
-            src={player.photoUrl}
+            src={player.photo_url}
             alt={player.name}
             style={{
               maxWidth: '90%',

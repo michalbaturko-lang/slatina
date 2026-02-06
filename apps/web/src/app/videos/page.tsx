@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -21,8 +21,11 @@ import {
   MessageSquare,
   Camera,
   Filter,
+  Download,
+  FolderInput,
+  Database,
 } from 'lucide-react';
-import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment, updateVideo } from '@/lib/cloud-store';
+import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment, updateVideo, downloadExport, importData, ExportData } from '@/lib/cloud-store';
 import { getPlayers, Player } from '@/lib/team-store';
 import { getVideoPlayers, VideoPlayersData, detectPlayersFromVideoUrl, savePlayersForVideo } from '@/lib/player-detection';
 import { uploadDataUrl } from '@/lib/upload';
@@ -59,6 +62,11 @@ export default function VideosPage() {
   const [isGeneratingThumbs, setIsGeneratingThumbs] = useState(false);
   const [thumbProgress, setThumbProgress] = useState({ current: 0, total: 0, currentVideo: '' });
   const [thumbResults, setThumbResults] = useState<{ success: number; failed: number }>({ success: 0, failed: 0 });
+
+  // Export/Import state
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadVideos();
@@ -297,6 +305,50 @@ export default function VideosPage() {
         await loadVideos();
       } catch (error) {
         console.error('Failed to delete video:', error);
+      }
+    }
+  };
+
+  // Export data
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await downloadExport();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export se nezdařil: ' + (error instanceof Error ? error.message : 'Neznámá chyba'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Import data
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as ExportData;
+
+      if (!data.version || !data.exportedAt) {
+        throw new Error('Neplatný formát souboru');
+      }
+
+      const result = await importData(data);
+      alert(`Import dokončen!\n\nImportováno: ${result.imported}\nPřeskočeno (již existuje): ${result.skipped}`);
+
+      // Reload data
+      await loadVideos();
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Import se nezdařil: ' + (error instanceof Error ? error.message : 'Neznámá chyba'));
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      if (importFileRef.current) {
+        importFileRef.current.value = '';
       }
     }
   };
@@ -592,6 +644,44 @@ export default function VideosPage() {
             ) : null;
           })()
         )}
+
+        {/* Data Sync - Export/Import */}
+        <div className="mb-6 p-4 bg-gray-800 border border-gray-700 rounded-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Database className="w-5 h-5 text-cyan-500" />
+              <div>
+                <span className="font-medium">Synchronizace dat</span>
+                <p className="text-sm text-gray-400">Export/import pro přenos mezi zařízeními</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExport}
+                disabled={isExporting || isImporting}
+                className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 px-4 py-2 rounded-lg transition"
+              >
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Export
+              </button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                className="hidden"
+              />
+              <button
+                onClick={() => importFileRef.current?.click()}
+                disabled={isExporting || isImporting}
+                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-500 disabled:opacity-50 px-4 py-2 rounded-lg transition"
+              >
+                {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderInput className="w-4 h-4" />}
+                Import
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Videos */}
         {filteredAndSortedVideos.length === 0 ? (

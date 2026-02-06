@@ -10,6 +10,7 @@ export interface Player {
   number: number | null;
   position: string | null;
   photo_url: string | null;
+  intro_video_url: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -877,4 +878,165 @@ export async function getRatingsForPlayer(playerId: string): Promise<VideoRating
 export async function getVideoIdsWithPlayerRating(playerId: string): Promise<string[]> {
   const ratings = await getRatingsForPlayer(playerId);
   return [...new Set(ratings.map(r => r.video_id))];
+}
+
+// ============================================
+// DATA EXPORT/IMPORT
+// ============================================
+
+export interface ExportData {
+  version: number;
+  exportedAt: string;
+  players: Player[];
+  matches: Match[];
+  videos: Video[];
+  goals: Goal[];
+  playerPhotos: PlayerPhoto[];
+  playerClips: PlayerClip[];
+  comments: Comment[];
+  ratings: VideoRating[];
+}
+
+/**
+ * Export all data to JSON (for backup/transfer between devices)
+ */
+export async function exportAllData(): Promise<ExportData> {
+  const [players, matches, videos, goals, playerPhotos, playerClips, ratings] = await Promise.all([
+    getPlayers(),
+    getMatches(),
+    getVideos(),
+    getGoals(),
+    getAllPlayerPhotos(),
+    getAllPlayerClips(),
+    getAllRatings(),
+  ]);
+
+  // Comments need special handling - load all from localStorage
+  const commentsData = typeof window !== 'undefined' ? localStorage.getItem('slatina-comments') : null;
+  const comments = commentsData ? JSON.parse(commentsData) : [];
+
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    players,
+    matches,
+    videos,
+    goals,
+    playerPhotos,
+    playerClips,
+    comments,
+    ratings,
+  };
+}
+
+/**
+ * Get all player photos (not filtered by player)
+ */
+async function getAllPlayerPhotos(): Promise<PlayerPhoto[]> {
+  if (!isProductionMode()) {
+    const data = localStorage.getItem('slatina-player-photos');
+    return data ? JSON.parse(data) : [];
+  }
+
+  const { data, error } = await supabase
+    .from('player_photos')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Get all player clips (not filtered by player)
+ */
+async function getAllPlayerClips(): Promise<PlayerClip[]> {
+  if (!isProductionMode()) {
+    const data = localStorage.getItem('slatina-player-clips');
+    return data ? JSON.parse(data) : [];
+  }
+
+  const { data, error } = await supabase
+    .from('player_clips')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Download export as JSON file
+ */
+export async function downloadExport(): Promise<void> {
+  const data = await exportAllData();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `skslatina-backup-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Import data from JSON file (merges with existing data)
+ */
+export async function importData(jsonData: ExportData): Promise<{ imported: number; skipped: number }> {
+  let imported = 0;
+  let skipped = 0;
+
+  // Import players
+  if (jsonData.players?.length) {
+    for (const player of jsonData.players) {
+      try {
+        const existing = await getPlayer(player.id);
+        if (!existing) {
+          await createPlayer({
+            name: player.name,
+            number: player.number,
+            position: player.position,
+            photo_url: player.photo_url,
+            intro_video_url: player.intro_video_url,
+            active: player.active,
+          });
+          imported++;
+        } else {
+          // Update existing player with photo/video URLs if missing
+          if (!existing.photo_url && player.photo_url) {
+            await updatePlayer(player.id, { photo_url: player.photo_url });
+            imported++;
+          } else if (!existing.intro_video_url && player.intro_video_url) {
+            await updatePlayer(player.id, { intro_video_url: player.intro_video_url });
+            imported++;
+          } else {
+            skipped++;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to import player:', player.name, err);
+        skipped++;
+      }
+    }
+  }
+
+  // Import ratings to localStorage
+  if (jsonData.ratings?.length) {
+    const existingRatings = await getAllRatings();
+    const existingIds = new Set(existingRatings.map(r => r.id));
+    const newRatings = jsonData.ratings.filter(r => !existingIds.has(r.id));
+
+    if (newRatings.length > 0) {
+      const allRatings = [...existingRatings, ...newRatings];
+      localStorage.setItem('slatina-video-ratings', JSON.stringify(allRatings));
+      imported += newRatings.length;
+    }
+    skipped += jsonData.ratings.length - newRatings.length;
+  }
+
+  return { imported, skipped };
 }

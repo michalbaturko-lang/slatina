@@ -16,6 +16,7 @@ export interface Database {
           number: number | null;
           position: string | null;
           photo_url: string | null;
+          intro_video_url: string | null;
           active: boolean;
           created_at: string;
           updated_at: string;
@@ -26,6 +27,7 @@ export interface Database {
           number?: number | null;
           position?: string | null;
           photo_url?: string | null;
+          intro_video_url?: string | null;
           active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -36,6 +38,7 @@ export interface Database {
           number?: number | null;
           position?: string | null;
           photo_url?: string | null;
+          intro_video_url?: string | null;
           active?: boolean;
           created_at?: string;
           updated_at?: string;
