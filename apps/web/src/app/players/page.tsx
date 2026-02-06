@@ -12,12 +12,17 @@ import {
   ChevronRight,
   Plus,
   Edit2,
+  RefreshCw,
+  UserPlus,
 } from 'lucide-react';
+import { getTeam } from '@/lib/team-store';
 import {
-  getTeam,
-  resetPlayersToDefault,
-} from '@/lib/team-store';
-import { getPlayers, Player } from '@/lib/cloud-store';
+  getPlayers,
+  createPlayer,
+  seedPlayersIfEmpty,
+  resetRosterToDefault,
+  Player,
+} from '@/lib/cloud-store';
 
 // Simplified stats for now - will be computed from cloud data
 interface PlayerStats {
@@ -32,35 +37,84 @@ export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [stats, setStats] = useState<Record<string, PlayerStats>>({});
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [newPlayerNumber, setNewPlayerNumber] = useState('');
+  const [adding, setAdding] = useState(false);
   const team = typeof window !== 'undefined' ? getTeam() : null;
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Load from Supabase (cloud) instead of localStorage
-        const playerList = await getPlayers();
-        setPlayers(playerList);
+  const loadPlayers = async () => {
+    try {
+      // First, seed players if empty (ensures data exists in Supabase)
+      await seedPlayersIfEmpty();
 
-        // Initialize empty stats for now - can be enhanced later
-        const statsMap: Record<string, PlayerStats> = {};
-        playerList.forEach(p => {
-          statsMap[p.id] = {
-            playerId: p.id,
-            matchesPlayed: 0,
-            goals: 0,
-            assists: 0,
-            commentsCount: 0,
-          };
-        });
-        setStats(statsMap);
-      } catch (err) {
-        console.error('Failed to load players:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
+      // Load from Supabase (cloud)
+      const playerList = await getPlayers();
+      setPlayers(playerList);
+
+      // Initialize empty stats for now - can be enhanced later
+      const statsMap: Record<string, PlayerStats> = {};
+      playerList.forEach(p => {
+        statsMap[p.id] = {
+          playerId: p.id,
+          matchesPlayed: 0,
+          goals: 0,
+          assists: 0,
+          commentsCount: 0,
+        };
+      });
+      setStats(statsMap);
+    } catch (err) {
+      console.error('Failed to load players:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPlayers();
   }, []);
+
+  const handleResetRoster = async () => {
+    if (!confirm('Resetovat seznam hráčů na výchozí soupisku? Fotky a videa hráčů zůstanou zachovány.')) {
+      return;
+    }
+    setResetting(true);
+    try {
+      await resetRosterToDefault();
+      await loadPlayers();
+    } catch (err) {
+      console.error('Failed to reset roster:', err);
+      alert('Nepodařilo se resetovat soupisku');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleAddPlayer = async () => {
+    if (!newPlayerName.trim()) return;
+    setAdding(true);
+    try {
+      await createPlayer({
+        name: newPlayerName.trim(),
+        number: newPlayerNumber ? parseInt(newPlayerNumber) : null,
+        position: null,
+        photo_url: null,
+        intro_video_url: null,
+        active: true,
+      });
+      setNewPlayerName('');
+      setNewPlayerNumber('');
+      setShowAddModal(false);
+      await loadPlayers();
+    } catch (err) {
+      console.error('Failed to add player:', err);
+      alert('Nepodařilo se přidat hráče');
+    } finally {
+      setAdding(false);
+    }
+  };
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#030712', color: 'white' }}>
@@ -92,25 +146,45 @@ export default function PlayersPage() {
               </div>
             </div>
           </div>
-          <button
-            onClick={() => {
-              if (confirm('Resetovat seznam hráčů na aktuální soupisku?')) {
-                resetPlayersToDefault();
-                window.location.reload();
-              }
-            }}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#374151',
-              border: 'none',
-              borderRadius: 8,
-              color: '#9ca3af',
-              cursor: 'pointer',
-              fontSize: 12,
-            }}
-          >
-            Resetovat soupisku
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setShowAddModal(true)}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: '#2563eb',
+                border: 'none',
+                borderRadius: 8,
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <UserPlus size={14} />
+              Přidat
+            </button>
+            <button
+              onClick={handleResetRoster}
+              disabled={resetting}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: '#374151',
+                border: 'none',
+                borderRadius: 8,
+                color: '#9ca3af',
+                cursor: resetting ? 'wait' : 'pointer',
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <RefreshCw size={14} className={resetting ? 'animate-spin' : ''} />
+              {resetting ? 'Resetuji...' : 'Reset'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -246,7 +320,151 @@ export default function PlayersPage() {
             );
           })}
         </div>
+
+        {/* Loading state */}
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>
+            Načítání hráčů...
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && players.length === 0 && (
+          <div style={{
+            textAlign: 'center',
+            padding: 40,
+            backgroundColor: '#1f2937',
+            borderRadius: 12,
+          }}>
+            <Users size={48} style={{ color: '#4b5563', margin: '0 auto 16px' }} />
+            <p style={{ color: '#9ca3af', marginBottom: 16 }}>Zatím žádní hráči</p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#2563eb',
+                border: 'none',
+                borderRadius: 8,
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              Přidat prvního hráče
+            </button>
+          </div>
+        )}
       </main>
+
+      {/* Add Player Modal */}
+      {showAddModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16,
+          }}
+          onClick={() => !adding && setShowAddModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#1f2937',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 400,
+              width: '100%',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Přidat hráče</h3>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>
+                Jméno *
+              </label>
+              <input
+                type="text"
+                value={newPlayerName}
+                onChange={e => setNewPlayerName(e.target.value)}
+                placeholder="Jan Novák"
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  backgroundColor: '#374151',
+                  border: '1px solid #4b5563',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>
+                Číslo dresu
+              </label>
+              <input
+                type="number"
+                value={newPlayerNumber}
+                onChange={e => setNewPlayerNumber(e.target.value)}
+                placeholder="7"
+                min="1"
+                max="99"
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  backgroundColor: '#374151',
+                  border: '1px solid #4b5563',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                }}
+              />
+            </div>
+
+            <button
+              onClick={handleAddPlayer}
+              disabled={adding || !newPlayerName.trim()}
+              style={{
+                width: '100%',
+                padding: 14,
+                backgroundColor: newPlayerName.trim() ? '#2563eb' : '#374151',
+                border: 'none',
+                borderRadius: 8,
+                color: 'white',
+                cursor: adding || !newPlayerName.trim() ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              {adding ? 'Přidávám...' : 'Přidat hráče'}
+            </button>
+
+            <button
+              onClick={() => setShowAddModal(false)}
+              disabled={adding}
+              style={{
+                width: '100%',
+                padding: 12,
+                backgroundColor: 'transparent',
+                border: 'none',
+                borderRadius: 8,
+                color: '#9ca3af',
+                cursor: 'pointer',
+                marginTop: 8,
+                fontSize: 14,
+              }}
+            >
+              Zrušit
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

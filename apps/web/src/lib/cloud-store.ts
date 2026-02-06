@@ -186,6 +186,88 @@ export async function updatePlayer(id: string, updates: Partial<Player>): Promis
   return data as Player;
 }
 
+export async function deletePlayerCloud(id: string): Promise<void> {
+  if (!isProductionMode()) {
+    const players = JSON.parse(localStorage.getItem('slatina-players') || '[]');
+    const filtered = players.filter((p: Player) => p.id !== id);
+    localStorage.setItem('slatina-players', JSON.stringify(filtered));
+    return;
+  }
+
+  const { error } = await supabase
+    .from('players')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// Default roster for SK Slatina 2017
+const DEFAULT_ROSTER = [
+  { name: 'Tom Frank', number: 1, position: 'Brankář' },
+  { name: 'Míša Nguyen', number: 2, position: null },
+  { name: 'Domča Handl', number: 3, position: null },
+  { name: 'Adri Do', number: 6, position: null },
+  { name: 'Aďa Štěpán', number: 7, position: null },
+  { name: 'Míša Baturko', number: 8, position: null },
+  { name: 'Patrik Beneš', number: 9, position: null },
+  { name: 'Honza Joura', number: 10, position: null },
+  { name: 'Filip Braun', number: 11, position: null },
+  { name: 'Hugo Heger', number: 12, position: null },
+  { name: 'Lukáš Hrdlička', number: null, position: null },
+  { name: 'Jindra Tomsa', number: null, position: null },
+  { name: 'David Peterka', number: null, position: null },
+];
+
+/**
+ * Seed default players into Supabase if empty
+ * Call this on app init to ensure players exist
+ */
+export async function seedPlayersIfEmpty(): Promise<{ seeded: boolean; count: number }> {
+  try {
+    const existing = await getPlayers();
+    if (existing.length > 0) {
+      return { seeded: false, count: existing.length };
+    }
+
+    // Insert default roster
+    for (const player of DEFAULT_ROSTER) {
+      await createPlayer({
+        name: player.name,
+        number: player.number,
+        position: player.position,
+        photo_url: null,
+        intro_video_url: null,
+        active: true,
+      });
+    }
+
+    return { seeded: true, count: DEFAULT_ROSTER.length };
+  } catch (err) {
+    console.error('Failed to seed players:', err);
+    throw err;
+  }
+}
+
+/**
+ * Reset roster to default (delete all and re-seed)
+ */
+export async function resetRosterToDefault(): Promise<{ count: number }> {
+  if (!isProductionMode()) {
+    localStorage.removeItem('slatina-players');
+    return seedPlayersIfEmpty();
+  }
+
+  // Delete all existing players
+  const existing = await getPlayers();
+  for (const player of existing) {
+    await deletePlayerCloud(player.id);
+  }
+
+  // Re-seed
+  return seedPlayersIfEmpty();
+}
+
 // ============================================
 // VIDEOS
 // ============================================
