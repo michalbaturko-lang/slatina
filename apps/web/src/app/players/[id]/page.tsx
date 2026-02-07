@@ -23,7 +23,7 @@ import {
   getAssistsForPlayer,
   CoachComment,
 } from '@/lib/team-store';
-import { getVideoIdsWithPlayer } from '@/lib/player-detection';
+import { getVideoIdsWithPlayer, getVideoIdsWithNumber } from '@/lib/player-detection';
 import {
   getPlayers as getPlayersCloud,
   getPlayer as getPlayerCloud,
@@ -107,11 +107,13 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
       setMatches(playerMatches);
 
       // Load videos where player was detected (by jersey number) or rated (Hodnocení)
-      const detectedVideoIds = getVideoIdsWithPlayer(params.id);
+      // Search by both player ID and jersey number (handles UUID vs legacy 'p8' ID mismatch)
+      const detectedByIdVideoIds = getVideoIdsWithPlayer(params.id);
+      const detectedByNumberVideoIds = foundPlayer.number ? getVideoIdsWithNumber(foundPlayer.number) : [];
       const ratedVideoIds = await getVideoIdsWithPlayerRating(params.id);
 
       // Combine and deduplicate video IDs
-      const allVideoIds = [...new Set([...detectedVideoIds, ...ratedVideoIds])];
+      const allVideoIds = [...new Set([...detectedByIdVideoIds, ...detectedByNumberVideoIds, ...ratedVideoIds])];
 
       // Load all videos and matches
       const [allVideos, matchesData] = await Promise.all([
