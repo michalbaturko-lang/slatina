@@ -142,25 +142,37 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     if (!file || !player) return;
 
     setUploading(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      console.error('Failed to read file');
+      alert('Nepodařilo se načíst soubor');
+      setUploading(false);
+    };
+    reader.onload = async (event) => {
+      try {
         const dataUrl = event.target?.result as string;
         const filename = `player-${player.id}-${Date.now()}.jpg`;
+        console.log('Uploading photo for player:', player.id, player.name);
         const result = await uploadDataUrl(dataUrl, 'photos', filename);
+        console.log('Upload result:', result);
         // Save to Supabase (cloud) instead of localStorage
         const updated = await updatePlayerCloud(player.id, { photo_url: result.publicUrl });
+        console.log('Update result:', updated);
         if (updated) {
           setPlayer(updated);
+          setShowPhotoModal(false);
+        } else {
+          alert('Nepodařilo se uložit fotku do databáze');
         }
-        setShowPhotoModal(false);
+      } catch (err) {
+        console.error('Failed to upload photo:', err);
+        alert('Nepodařilo se nahrát fotku: ' + (err instanceof Error ? err.message : 'Neznámá chyba'));
+      } finally {
         setUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('Failed to upload photo:', err);
-      setUploading(false);
-    }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleIntroVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,23 +208,35 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     if (!file || !player) return;
 
     setUploadingBackground(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      console.error('Failed to read background file');
+      alert('Nepodařilo se načíst soubor');
+      setUploadingBackground(false);
+    };
+    reader.onload = async (event) => {
+      try {
         const dataUrl = event.target?.result as string;
         const filename = `player-bg-${player.id}-${Date.now()}.jpg`;
+        console.log('Uploading background for player:', player.id, player.name);
         const result = await uploadDataUrl(dataUrl, 'photos', filename);
+        console.log('Background upload result:', result);
         const updated = await updatePlayerCloud(player.id, { profile_background_url: result.publicUrl });
+        console.log('Background update result:', updated);
         if (updated) {
           setPlayer(updated);
+        } else {
+          alert('Nepodařilo se uložit pozadí do databáze');
         }
+      } catch (err) {
+        console.error('Failed to upload background:', err);
+        alert('Nepodařilo se nahrát pozadí: ' + (err instanceof Error ? err.message : 'Neznámá chyba'));
+      } finally {
         setUploadingBackground(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('Failed to upload background:', err);
-      setUploadingBackground(false);
-    }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const removeBackground = async () => {
