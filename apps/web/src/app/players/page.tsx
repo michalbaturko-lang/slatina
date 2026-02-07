@@ -15,12 +15,12 @@ import {
   RefreshCw,
   UserPlus,
 } from 'lucide-react';
-import { getTeam } from '@/lib/team-store';
 import {
   getPlayers,
   createPlayer,
   seedPlayersIfEmpty,
   resetRosterToDefault,
+  getTeamConfig,
   Player,
 } from '@/lib/cloud-store';
 
@@ -42,12 +42,18 @@ export default function PlayersPage() {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerNumber, setNewPlayerNumber] = useState('');
   const [adding, setAdding] = useState(false);
-  const team = typeof window !== 'undefined' ? getTeam() : null;
+  const [teamName, setTeamName] = useState('SK Slatina 2017');
 
   const loadPlayers = async () => {
     try {
       // First, seed players if empty (ensures data exists in Supabase)
       await seedPlayersIfEmpty();
+
+      // Load team config
+      const config = await getTeamConfig();
+      if (config?.name) {
+        setTeamName(config.name);
+      }
 
       // Load from Supabase (cloud)
       const playerList = await getPlayers();
@@ -102,6 +108,7 @@ export default function PlayersPage() {
         position: null,
         photo_url: null,
         intro_video_url: null,
+        profile_background_url: null,
         active: true,
       });
       setNewPlayerName('');
@@ -142,7 +149,7 @@ export default function PlayersPage() {
               />
               <div>
                 <h1 style={{ fontWeight: 600, fontSize: 18 }}>Hráči</h1>
-                <p style={{ fontSize: 12, color: '#9ca3af' }}>{team?.name || 'SK Slatina 2017'}</p>
+                <p style={{ fontSize: 12, color: '#9ca3af' }}>{teamName}</p>
               </div>
             </div>
           </div>

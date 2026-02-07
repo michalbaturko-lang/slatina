@@ -17,13 +17,7 @@ import {
   Volume2,
   Film,
 } from 'lucide-react';
-import {
-  getCommentsForPlayer,
-  getGoalsForPlayer,
-  getAssistsForPlayer,
-  CoachComment,
-} from '@/lib/team-store';
-import { getVideoIdsWithPlayer, getVideoIdsWithNumber } from '@/lib/player-detection';
+import { getVideoIdsWithNumber } from '@/lib/player-detection';
 import {
   getPlayers as getPlayersCloud,
   getPlayer as getPlayerCloud,
@@ -37,6 +31,10 @@ import {
   getMatches as getMatchesCloud,
   getMatchesForPlayer,
   Match as MatchCloud,
+  getCoachCommentsForPlayer,
+  getGoalsForPlayer,
+  getAssistsForPlayer,
+  CoachComment,
 } from '@/lib/cloud-store';
 import { uploadDataUrl, uploadFile } from '@/lib/upload';
 
@@ -68,6 +66,10 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
   const [uploadingIntroVideo, setUploadingIntroVideo] = useState(false);
   const introVideoInputRef = useRef<HTMLInputElement>(null);
 
+  // Profile background
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const backgroundInputRef = useRef<HTMLInputElement>(null);
+
   // Section refs for scrolling
   const videosSectionRef = useRef<HTMLDivElement>(null);
   const matchesSectionRef = useRef<HTMLDivElement>(null);
@@ -93,27 +95,26 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
       setPlayer(foundPlayer);
 
-      // Load related data (comments, goals, assists from localStorage)
-      const playerComments = getCommentsForPlayer(params.id);
-      const playerGoals = getGoalsForPlayer(params.id);
-      const playerAssists = getAssistsForPlayer(params.id);
+      // Load related data from Supabase
+      const [playerComments, playerGoals, playerAssists, playerMatches] = await Promise.all([
+        getCoachCommentsForPlayer(params.id),
+        getGoalsForPlayer(params.id),
+        getAssistsForPlayer(params.id),
+        getMatchesForPlayer(params.id),
+      ]);
 
       setComments(playerComments);
       setGoals(playerGoals.length);
       setAssists(playerAssists.length);
-
-      // Load matches from Supabase (match_players table)
-      const playerMatches = await getMatchesForPlayer(params.id);
       setMatches(playerMatches);
 
       // Load videos where player was detected (by jersey number) or rated (Hodnocení)
-      // Search by both player ID and jersey number (handles UUID vs legacy 'p8' ID mismatch)
-      const detectedByIdVideoIds = getVideoIdsWithPlayer(params.id);
-      const detectedByNumberVideoIds = foundPlayer.number ? getVideoIdsWithNumber(foundPlayer.number) : [];
+      // Search by jersey number (from video_detections table)
+      const detectedByNumberVideoIds = foundPlayer.number ? await getVideoIdsWithNumber(foundPlayer.number) : [];
       const ratedVideoIds = await getVideoIdsWithPlayerRating(params.id);
 
       // Combine and deduplicate video IDs
-      const allVideoIds = [...new Set([...detectedByIdVideoIds, ...detectedByNumberVideoIds, ...ratedVideoIds])];
+      const allVideoIds = [...new Set([...detectedByNumberVideoIds, ...ratedVideoIds])];
 
       // Load all videos and matches
       const [allVideos, matchesData] = await Promise.all([
@@ -190,7 +191,38 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
     if (updated) setPlayer(updated);
   };
 
-  const formatDate = (timestamp: number) => {
+  const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !player) return;
+
+    setUploadingBackground(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const dataUrl = event.target?.result as string;
+        const filename = `player-bg-${player.id}-${Date.now()}.jpg`;
+        const result = await uploadDataUrl(dataUrl, 'photos', filename);
+        const updated = await updatePlayerCloud(player.id, { profile_background_url: result.publicUrl });
+        if (updated) {
+          setPlayer(updated);
+        }
+        setUploadingBackground(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Failed to upload background:', err);
+      setUploadingBackground(false);
+    }
+  };
+
+  const removeBackground = async () => {
+    if (!player) return;
+    if (!confirm('Odebrat pozadí profilu?')) return;
+    const updated = await updatePlayerCloud(player.id, { profile_background_url: null });
+    if (updated) setPlayer(updated);
+  };
+
+  const formatDate = (timestamp: number | string) => {
     return new Date(timestamp).toLocaleDateString('cs-CZ', {
       day: 'numeric',
       month: 'short',
@@ -260,7 +292,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
         </div>
       </header>
 
-      <main style={{ maxWidth: 800, margin: '0 auto', padding: 16 }}>
+      <main style={{ maxWidth: 800, margin: '0 auto', padding: 16, paddingBottom: 100 }}>
         {/* Intro Video Hero */}
         {player.intro_video_url ? (
           <div style={{
@@ -416,123 +448,207 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
           onChange={handleIntroVideoUpload}
         />
 
-        {/* Player Card */}
+        {/* Profile Background with Photo */}
         <div style={{
-          backgroundColor: '#1f2937',
           borderRadius: 16,
-          padding: 24,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 16,
+          overflow: 'hidden',
           marginBottom: 24,
+          backgroundColor: '#1f2937',
         }}>
-          {/* Photo */}
-          <div style={{ position: 'relative' }}>
-            {player.photo_url ? (
-              <img
-                src={player.photo_url}
-                alt={player.name}
-                onClick={() => setShowPhotoZoom(true)}
+          {/* Background image section */}
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            aspectRatio: '16/9',
+            backgroundColor: '#374151',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {player.profile_background_url ? (
+              <>
+                <img
+                  src={player.profile_background_url}
+                  alt=""
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+                {/* Remove background button */}
+                <button
+                  onClick={removeBackground}
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10,
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </>
+            ) : (
+              <div
+                onClick={() => backgroundInputRef.current?.click()}
                 style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                }}
+              >
+                {uploadingBackground ? (
+                  <span>Nahrávání...</span>
+                ) : (
+                  <>
+                    <Camera size={24} style={{ marginBottom: 4 }} />
+                    <span style={{ fontSize: 12 }}>Přidat pozadí profilu</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Profile photo in center */}
+            <div style={{
+              position: 'relative',
+              zIndex: 5,
+            }}>
+              {player.photo_url ? (
+                <img
+                  src={player.photo_url}
+                  alt={player.name}
+                  onClick={() => setShowPhotoZoom(true)}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '4px solid white',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  }}
+                />
+              ) : (
+                <div style={{
                   width: 120,
                   height: 120,
                   borderRadius: '50%',
-                  objectFit: 'cover',
-                  border: '4px solid #374151',
+                  backgroundColor: '#1f2937',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 48,
+                  fontWeight: 700,
+                  color: '#60a5fa',
+                  border: '4px solid white',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}>
+                  {player.number || '?'}
+                </div>
+              )}
+              <button
+                onClick={() => setShowPhotoModal(true)}
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  backgroundColor: '#2563eb',
+                  border: '2px solid white',
+                  color: 'white',
                   cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
-              />
-            ) : (
-              <div style={{
-                width: 120,
-                height: 120,
-                borderRadius: '50%',
-                backgroundColor: '#374151',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 48,
-                fontWeight: 700,
-                color: '#60a5fa',
-                border: '4px solid #374151',
-              }}>
-                {player.number || '?'}
-              </div>
-            )}
-            <button
-              onClick={() => setShowPhotoModal(true)}
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                right: 0,
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                backgroundColor: '#2563eb',
-                border: 'none',
-                color: 'white',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Camera size={18} />
-            </button>
+              >
+                <Camera size={18} />
+              </button>
+            </div>
           </div>
 
-          {/* Name & Number */}
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{player.name}</h2>
-            <p style={{ color: '#9ca3af' }}>
-              {player.number && `#${player.number} • `}{player.position || 'Hráč'}
-            </p>
+          {/* Hidden input for background */}
+          <input
+            ref={backgroundInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleBackgroundUpload}
+          />
+
+          {/* Name & Stats section */}
+          <div style={{ padding: 24, paddingTop: 16 }}>
+            {/* Name & Number */}
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{player.name}</h2>
+              <p style={{ color: '#9ca3af' }}>
+                {player.number && `#${player.number} • `}{player.position || 'Hráč'}
+              </p>
+            </div>
+
+            {/* Stats Grid - responsive */}
+            {(() => {
+              // Calculate unique matches from videos where player was detected
+              const uniqueMatchIds = new Set(
+                playerVideos
+                  .filter(v => v.match_id)
+                  .map(v => v.match_id)
+              );
+              const matchesCount = uniqueMatchIds.size;
+
+              return (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 8,
+                  width: '100%',
+                }}>
+                  <div
+                    onClick={() => videosSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    style={{ textAlign: 'center', cursor: matchesCount > 0 ? 'pointer' : 'default' }}
+                  >
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#fbbf24' }}>{matchesCount}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Zápasů</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#22c55e' }}>{goals}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Gólů</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#60a5fa' }}>{assists}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Asist.</div>
+                  </div>
+                  <div
+                    onClick={() => comments.length > 0 && commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    style={{ textAlign: 'center', cursor: comments.length > 0 ? 'pointer' : 'default' }}
+                  >
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#a855f7' }}>{comments.length}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Kom.</div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
-
-          {/* Stats Grid */}
-          {(() => {
-            // Calculate unique matches from videos where player was detected
-            const uniqueMatchIds = new Set(
-              playerVideos
-                .filter(v => v.match_id)
-                .map(v => v.match_id)
-            );
-            const matchesCount = uniqueMatchIds.size;
-
-            return (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 16,
-                width: '100%',
-                marginTop: 8,
-              }}>
-                <div
-                  onClick={() => videosSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                  style={{ textAlign: 'center', cursor: matchesCount > 0 ? 'pointer' : 'default' }}
-                >
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#fbbf24' }}>{matchesCount}</div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Zápasů</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#22c55e' }}>{goals}</div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Gólů</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#60a5fa' }}>{assists}</div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Asistencí</div>
-                </div>
-                <div
-                  onClick={() => comments.length > 0 && commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                  style={{ textAlign: 'center', cursor: comments.length > 0 ? 'pointer' : 'default' }}
-                >
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#a855f7' }}>{comments.length}</div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Komentářů</div>
-                </div>
-              </div>
-            );
-          })()}
         </div>
 
         {/* Videos Section */}
@@ -752,7 +868,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
               {(showAllComments ? comments : comments.slice(0, 5)).map(comment => (
                 <Link
                   key={comment.id}
-                  href={`/videos/${comment.videoId}?t=${Math.floor(comment.time)}`}
+                  href={`/videos/${comment.video_id}?t=${Math.floor(comment.time)}`}
                   style={{
                     backgroundColor: '#1f2937',
                     borderRadius: 12,
@@ -784,7 +900,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
                        comment.category === 'improvement' ? 'Zlepšit' :
                        comment.category === 'tactic' ? 'Taktika' : 'Poznámka'}
                     </span>
-                    <span>{formatDate(comment.createdAt)}</span>
+                    <span>{formatDate(comment.created_at)}</span>
                   </div>
                 </Link>
               ))}

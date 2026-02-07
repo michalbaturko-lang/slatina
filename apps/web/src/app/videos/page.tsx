@@ -25,9 +25,8 @@ import {
   FolderInput,
   Database,
 } from 'lucide-react';
-import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment, updateVideo, downloadExport, importData, ExportData } from '@/lib/cloud-store';
-import { getPlayers, Player } from '@/lib/team-store';
-import { getVideoPlayers, VideoPlayersData, detectPlayersFromVideoUrl, savePlayersForVideo } from '@/lib/player-detection';
+import { getVideos, deleteVideo, Video, getComments, getAudioComments, getScreenshots, getMatches, Match, Comment, AudioComment, updateVideo, downloadExport, importData, ExportData, getPlayers, Player } from '@/lib/cloud-store';
+import { getVideoPlayersAsync, VideoPlayersData, detectPlayersFromVideoUrl, savePlayersForVideo } from '@/lib/player-detection';
 import { uploadDataUrl } from '@/lib/upload';
 
 interface VideoStats {
@@ -82,10 +81,12 @@ export default function VideosPage() {
       setVideos(storedVideos);
       setMatches(storedMatches);
 
-      // Load players and video-players associations
-      const allPlayers = getPlayers().filter(p => p.active);
-      const videoPlayers = getVideoPlayers();
-      setPlayers(allPlayers.sort((a, b) => {
+      // Load players and video-players associations from Supabase
+      const [allPlayers, videoPlayers] = await Promise.all([
+        getPlayers(),
+        getVideoPlayersAsync(),
+      ]);
+      setPlayers(allPlayers.filter(p => p.active).sort((a, b) => {
         if (a.number && b.number) return a.number - b.number;
         if (a.number) return -1;
         if (b.number) return 1;

@@ -11,6 +11,7 @@ export interface Player {
   position: string | null;
   photo_url: string | null;
   intro_video_url: string | null;
+  profile_background_url: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -109,15 +110,109 @@ export interface PlayerClip {
   created_at: string;
 }
 
+export interface Coach {
+  id: string;
+  name: string;
+  role: string;
+  photo_url: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Static data - opponents and default coaches
+export const OPPONENT_TEAMS = [
+  { id: 'prace', name: 'Prace' },
+  { id: 'ratiskovice', name: 'Ratíškovice' },
+  { id: 'slovan', name: 'Slovan' },
+  { id: 'rafk', name: 'RAFK' },
+  { id: 'vyskov', name: 'Vyškov' },
+  { id: 'chrlice', name: 'Chrlice' },
+];
+
+export const DEFAULT_COACHES = [
+  { id: 'ales', name: 'Aleš', role: 'Hlavní trenér' },
+  { id: 'jirka', name: 'Jirka', role: 'Asistent' },
+  { id: 'david', name: 'David', role: 'Asistent' },
+];
+
+export interface TeamConfig {
+  id: string;
+  name: string;
+  jersey_color: string;
+  secondary_color: string;
+  age_group: string;
+  formation: string;
+  focus_areas: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachComment {
+  id: string;
+  video_id: string;
+  time: number;
+  text: string;
+  category: 'praise' | 'improvement' | 'tactic' | 'note';
+  player_ids: string[];
+  created_at: string;
+}
+
+export interface AIFeedback {
+  id: string;
+  event_id: string;
+  video_id: string;
+  is_correct: boolean;
+  comment: string | null;
+  correct_label: string | null;
+  created_at: string;
+}
+
+export type RatingType = 'problem' | 'interesting' | 'praise';
+
+export interface VideoRating {
+  id: string;
+  video_id: string;
+  time: number;
+  type: RatingType;
+  player_id?: string;
+  player_name?: string;
+  note?: string;
+  created_at: string;
+}
+
+// ============================================
+// HELPER: Retry with exponential backoff
+// ============================================
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 2,
+  label: string = ''
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const waitMs = Math.pow(2, attempt) * 1000;
+        console.log(`[${label}] Retry ${attempt + 1}/${maxRetries} after ${waitMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // ============================================
 // PLAYERS
 // ============================================
 
 export async function getPlayers(): Promise<Player[]> {
-  if (!isProductionMode()) {
-    // Fallback to localStorage
-    const data = localStorage.getItem('slatina-players');
-    return data ? JSON.parse(data) : [];
+  if (!supabase) {
+    console.error('[getPlayers] Supabase client not available');
+    return [];
   }
 
   const { data, error } = await supabase
@@ -131,10 +226,7 @@ export async function getPlayers(): Promise<Player[]> {
 }
 
 export async function getPlayer(id: string): Promise<Player | null> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-players') || '[]');
-    return players.find((p: Player) => p.id === id) || null;
-  }
+  if (!supabase) return null;
 
   const { data, error } = await supabase
     .from('players')
@@ -147,13 +239,7 @@ export async function getPlayer(id: string): Promise<Player | null> {
 }
 
 export async function createPlayer(player: Omit<Player, 'id' | 'created_at' | 'updated_at'>): Promise<Player> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-players') || '[]');
-    const newPlayer = { ...player, id: `player-${Date.now()}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    players.push(newPlayer);
-    localStorage.setItem('slatina-players', JSON.stringify(players));
-    return newPlayer as Player;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('players')
@@ -166,14 +252,7 @@ export async function createPlayer(player: Omit<Player, 'id' | 'created_at' | 'u
 }
 
 export async function updatePlayer(id: string, updates: Partial<Player>): Promise<Player | null> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-players') || '[]');
-    const index = players.findIndex((p: Player) => p.id === id);
-    if (index === -1) return null;
-    players[index] = { ...players[index], ...updates, updated_at: new Date().toISOString() };
-    localStorage.setItem('slatina-players', JSON.stringify(players));
-    return players[index];
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('players')
@@ -187,12 +266,7 @@ export async function updatePlayer(id: string, updates: Partial<Player>): Promis
 }
 
 export async function deletePlayerCloud(id: string): Promise<void> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-players') || '[]');
-    const filtered = players.filter((p: Player) => p.id !== id);
-    localStorage.setItem('slatina-players', JSON.stringify(filtered));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('players')
@@ -219,10 +293,6 @@ const DEFAULT_ROSTER = [
   { name: 'David Peterka', number: null, position: null },
 ];
 
-/**
- * Seed default players into Supabase if empty
- * Call this on app init to ensure players exist
- */
 export async function seedPlayersIfEmpty(): Promise<{ seeded: boolean; count: number }> {
   try {
     const existing = await getPlayers();
@@ -230,7 +300,6 @@ export async function seedPlayersIfEmpty(): Promise<{ seeded: boolean; count: nu
       return { seeded: false, count: existing.length };
     }
 
-    // Insert default roster
     for (const player of DEFAULT_ROSTER) {
       await createPlayer({
         name: player.name,
@@ -238,6 +307,7 @@ export async function seedPlayersIfEmpty(): Promise<{ seeded: boolean; count: nu
         position: player.position,
         photo_url: null,
         intro_video_url: null,
+        profile_background_url: null,
         active: true,
       });
     }
@@ -249,22 +319,11 @@ export async function seedPlayersIfEmpty(): Promise<{ seeded: boolean; count: nu
   }
 }
 
-/**
- * Reset roster to default (delete all and re-seed)
- */
 export async function resetRosterToDefault(): Promise<{ count: number }> {
-  if (!isProductionMode()) {
-    localStorage.removeItem('slatina-players');
-    return seedPlayersIfEmpty();
-  }
-
-  // Delete all existing players
   const existing = await getPlayers();
   for (const player of existing) {
     await deletePlayerCloud(player.id);
   }
-
-  // Re-seed
   return seedPlayersIfEmpty();
 }
 
@@ -272,48 +331,10 @@ export async function resetRosterToDefault(): Promise<{ count: number }> {
 // VIDEOS
 // ============================================
 
-const VIDEOS_CACHE_KEY = 'slatina-videos-cache';
-const MATCHES_CACHE_KEY = 'slatina-matches-cache';
-
-/**
- * Helper: retry a Supabase query with exponential backoff
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 2,
-  label: string = ''
-): Promise<T> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < maxRetries) {
-        const waitMs = Math.pow(2, attempt) * 1000; // 1s, 2s
-        console.log(`[${label}] Retry ${attempt + 1}/${maxRetries} after ${waitMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitMs));
-      }
-    }
-  }
-  throw lastError;
-}
-
 export async function getVideos(): Promise<Video[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-videos');
-    return data ? JSON.parse(data) : [];
-  }
-
   if (!supabase) {
-    console.error('[getVideos] Supabase client is null!');
-    // Fallback to cache
-    const cached = typeof window !== 'undefined' ? localStorage.getItem(VIDEOS_CACHE_KEY) : null;
-    if (cached) {
-      console.log('[getVideos] Using cached data as fallback');
-      return JSON.parse(cached);
-    }
-    throw new Error('Supabase připojení selhalo');
+    console.error('[getVideos] Supabase client not available');
+    return [];
   }
 
   try {
@@ -324,50 +345,20 @@ export async function getVideos(): Promise<Video[]> {
         .order('created_at', { ascending: false });
 
       if (error) {
-        throw new Error(`Chyba databáze: ${error.message} (${status})`);
+        throw new Error(`Database error: ${error.message} (${status})`);
       }
       return data || [];
     }, 2, 'getVideos');
 
-    // Cache successful results for fallback
-    if (videos.length > 0 && typeof window !== 'undefined') {
-      localStorage.setItem(VIDEOS_CACHE_KEY, JSON.stringify(videos));
-    }
-
-    // If Supabase returned 0 but we have cache, use cache
-    if (videos.length === 0 && typeof window !== 'undefined') {
-      const cached = localStorage.getItem(VIDEOS_CACHE_KEY);
-      if (cached) {
-        const cachedVideos = JSON.parse(cached);
-        if (cachedVideos.length > 0) {
-          console.warn('[getVideos] Supabase returned 0 videos, using cache with', cachedVideos.length, 'videos');
-          return cachedVideos;
-        }
-      }
-    }
-
     return videos;
   } catch (err) {
-    // On complete failure, try cache
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem(VIDEOS_CACHE_KEY);
-      if (cached) {
-        const cachedVideos = JSON.parse(cached);
-        if (cachedVideos.length > 0) {
-          console.warn('[getVideos] Using cached data after error:', err);
-          return cachedVideos;
-        }
-      }
-    }
+    console.error('[getVideos] Failed:', err);
     throw err;
   }
 }
 
 export async function getVideo(id: string): Promise<Video | null> {
-  if (!isProductionMode()) {
-    const videos = JSON.parse(localStorage.getItem('slatina-videos') || '[]');
-    return videos.find((v: Video) => v.id === id) || null;
-  }
+  if (!supabase) return null;
 
   const { data, error } = await supabase
     .from('videos')
@@ -380,13 +371,7 @@ export async function getVideo(id: string): Promise<Video | null> {
 }
 
 export async function createVideo(video: Omit<Video, 'id' | 'created_at' | 'updated_at'>): Promise<Video> {
-  if (!isProductionMode()) {
-    const videos = JSON.parse(localStorage.getItem('slatina-videos') || '[]');
-    const newVideo = { ...video, id: `video-${Date.now()}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    videos.unshift(newVideo);
-    localStorage.setItem('slatina-videos', JSON.stringify(videos));
-    return newVideo as Video;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('videos')
@@ -399,14 +384,7 @@ export async function createVideo(video: Omit<Video, 'id' | 'created_at' | 'upda
 }
 
 export async function updateVideo(id: string, updates: Partial<Video>): Promise<Video | null> {
-  if (!isProductionMode()) {
-    const videos = JSON.parse(localStorage.getItem('slatina-videos') || '[]');
-    const index = videos.findIndex((v: Video) => v.id === id);
-    if (index === -1) return null;
-    videos[index] = { ...videos[index], ...updates, updated_at: new Date().toISOString() };
-    localStorage.setItem('slatina-videos', JSON.stringify(videos));
-    return videos[index];
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('videos')
@@ -420,12 +398,7 @@ export async function updateVideo(id: string, updates: Partial<Video>): Promise<
 }
 
 export async function deleteVideo(id: string): Promise<void> {
-  if (!isProductionMode()) {
-    const videos = JSON.parse(localStorage.getItem('slatina-videos') || '[]');
-    const filtered = videos.filter((v: Video) => v.id !== id);
-    localStorage.setItem('slatina-videos', JSON.stringify(filtered));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('videos')
@@ -440,11 +413,7 @@ export async function deleteVideo(id: string): Promise<void> {
 // ============================================
 
 export async function getComments(videoId: string): Promise<Comment[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-comments');
-    const comments = data ? JSON.parse(data) : [];
-    return comments.filter((c: Comment) => c.video_id === videoId);
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('comments')
@@ -457,13 +426,7 @@ export async function getComments(videoId: string): Promise<Comment[]> {
 }
 
 export async function createComment(comment: Omit<Comment, 'id' | 'created_at'>): Promise<Comment> {
-  if (!isProductionMode()) {
-    const comments = JSON.parse(localStorage.getItem('slatina-comments') || '[]');
-    const newComment = { ...comment, id: `comment-${Date.now()}`, created_at: new Date().toISOString() };
-    comments.push(newComment);
-    localStorage.setItem('slatina-comments', JSON.stringify(comments));
-    return newComment as Comment;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('comments')
@@ -476,12 +439,7 @@ export async function createComment(comment: Omit<Comment, 'id' | 'created_at'>)
 }
 
 export async function deleteComment(id: string): Promise<void> {
-  if (!isProductionMode()) {
-    const comments = JSON.parse(localStorage.getItem('slatina-comments') || '[]');
-    const filtered = comments.filter((c: Comment) => c.id !== id);
-    localStorage.setItem('slatina-comments', JSON.stringify(filtered));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('comments')
@@ -496,11 +454,7 @@ export async function deleteComment(id: string): Promise<void> {
 // ============================================
 
 export async function getScreenshots(videoId: string): Promise<Screenshot[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-screenshots');
-    const screenshots = data ? JSON.parse(data) : [];
-    return screenshots.filter((s: Screenshot) => s.video_id === videoId);
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('screenshots')
@@ -513,13 +467,7 @@ export async function getScreenshots(videoId: string): Promise<Screenshot[]> {
 }
 
 export async function createScreenshot(screenshot: Omit<Screenshot, 'id' | 'created_at'>): Promise<Screenshot> {
-  if (!isProductionMode()) {
-    const screenshots = JSON.parse(localStorage.getItem('slatina-screenshots') || '[]');
-    const newScreenshot = { ...screenshot, id: `screenshot-${Date.now()}`, created_at: new Date().toISOString() };
-    screenshots.push(newScreenshot);
-    localStorage.setItem('slatina-screenshots', JSON.stringify(screenshots));
-    return newScreenshot as Screenshot;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('screenshots')
@@ -536,11 +484,7 @@ export async function createScreenshot(screenshot: Omit<Screenshot, 'id' | 'crea
 // ============================================
 
 export async function getAudioComments(videoId: string): Promise<AudioComment[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-audio-comments');
-    const comments = data ? JSON.parse(data) : [];
-    return comments.filter((c: AudioComment) => c.video_id === videoId);
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('audio_comments')
@@ -553,13 +497,7 @@ export async function getAudioComments(videoId: string): Promise<AudioComment[]>
 }
 
 export async function createAudioComment(comment: Omit<AudioComment, 'id' | 'created_at'>): Promise<AudioComment> {
-  if (!isProductionMode()) {
-    const comments = JSON.parse(localStorage.getItem('slatina-audio-comments') || '[]');
-    const newComment = { ...comment, id: `audio-${Date.now()}`, created_at: new Date().toISOString() };
-    comments.push(newComment);
-    localStorage.setItem('slatina-audio-comments', JSON.stringify(comments));
-    return newComment as AudioComment;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('audio_comments')
@@ -576,15 +514,7 @@ export async function createAudioComment(comment: Omit<AudioComment, 'id' | 'cre
 // ============================================
 
 export async function getMatches(): Promise<Match[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-matches');
-    return data ? JSON.parse(data) : [];
-  }
-
-  if (!supabase) {
-    const cached = typeof window !== 'undefined' ? localStorage.getItem(MATCHES_CACHE_KEY) : null;
-    return cached ? JSON.parse(cached) : [];
-  }
+  if (!supabase) return [];
 
   try {
     const matches = await withRetry(async () => {
@@ -597,33 +527,15 @@ export async function getMatches(): Promise<Match[]> {
       return data || [];
     }, 2, 'getMatches');
 
-    if (matches.length > 0 && typeof window !== 'undefined') {
-      localStorage.setItem(MATCHES_CACHE_KEY, JSON.stringify(matches));
-    }
-
-    if (matches.length === 0 && typeof window !== 'undefined') {
-      const cached = localStorage.getItem(MATCHES_CACHE_KEY);
-      if (cached) {
-        const cachedMatches = JSON.parse(cached);
-        if (cachedMatches.length > 0) return cachedMatches;
-      }
-    }
-
     return matches;
   } catch (err) {
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem(MATCHES_CACHE_KEY);
-      if (cached) return JSON.parse(cached);
-    }
+    console.error('[getMatches] Failed:', err);
     throw err;
   }
 }
 
 export async function getMatch(id: string): Promise<Match | null> {
-  if (!isProductionMode()) {
-    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
-    return matches.find((m: Match) => m.id === id) || null;
-  }
+  if (!supabase) return null;
 
   const { data, error } = await supabase
     .from('matches')
@@ -636,13 +548,7 @@ export async function getMatch(id: string): Promise<Match | null> {
 }
 
 export async function createMatch(match: Omit<Match, 'id' | 'created_at' | 'updated_at'>): Promise<Match> {
-  if (!isProductionMode()) {
-    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
-    const newMatch = { ...match, id: `match-${Date.now()}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    matches.unshift(newMatch);
-    localStorage.setItem('slatina-matches', JSON.stringify(matches));
-    return newMatch as Match;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('matches')
@@ -655,12 +561,7 @@ export async function createMatch(match: Omit<Match, 'id' | 'created_at' | 'upda
 }
 
 export async function deleteMatch(id: string): Promise<void> {
-  if (!isProductionMode()) {
-    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
-    const filtered = matches.filter((m: Match) => m.id !== id);
-    localStorage.setItem('slatina-matches', JSON.stringify(filtered));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('matches')
@@ -675,11 +576,7 @@ export async function deleteMatch(id: string): Promise<void> {
 // ============================================
 
 export async function getPlayerPhotos(playerId: string): Promise<PlayerPhoto[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-player-photos');
-    const photos = data ? JSON.parse(data) : [];
-    return photos.filter((p: PlayerPhoto) => p.player_id === playerId);
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('player_photos')
@@ -692,13 +589,7 @@ export async function getPlayerPhotos(playerId: string): Promise<PlayerPhoto[]> 
 }
 
 export async function createPlayerPhoto(photo: Omit<PlayerPhoto, 'id' | 'created_at'>): Promise<PlayerPhoto> {
-  if (!isProductionMode()) {
-    const photos = JSON.parse(localStorage.getItem('slatina-player-photos') || '[]');
-    const newPhoto = { ...photo, id: `photo-${Date.now()}`, created_at: new Date().toISOString() };
-    photos.unshift(newPhoto);
-    localStorage.setItem('slatina-player-photos', JSON.stringify(photos));
-    return newPhoto as PlayerPhoto;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('player_photos')
@@ -711,12 +602,7 @@ export async function createPlayerPhoto(photo: Omit<PlayerPhoto, 'id' | 'created
 }
 
 export async function deletePlayerPhoto(id: string): Promise<void> {
-  if (!isProductionMode()) {
-    const photos = JSON.parse(localStorage.getItem('slatina-player-photos') || '[]');
-    const filtered = photos.filter((p: PlayerPhoto) => p.id !== id);
-    localStorage.setItem('slatina-player-photos', JSON.stringify(filtered));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('player_photos')
@@ -731,11 +617,7 @@ export async function deletePlayerPhoto(id: string): Promise<void> {
 // ============================================
 
 export async function getPlayerClips(playerId: string): Promise<PlayerClip[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-player-clips');
-    const clips = data ? JSON.parse(data) : [];
-    return clips.filter((c: PlayerClip) => c.player_id === playerId);
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('player_clips')
@@ -748,13 +630,7 @@ export async function getPlayerClips(playerId: string): Promise<PlayerClip[]> {
 }
 
 export async function createPlayerClip(clip: Omit<PlayerClip, 'id' | 'created_at'>): Promise<PlayerClip> {
-  if (!isProductionMode()) {
-    const clips = JSON.parse(localStorage.getItem('slatina-player-clips') || '[]');
-    const newClip = { ...clip, id: `clip-${Date.now()}`, created_at: new Date().toISOString() };
-    clips.unshift(newClip);
-    localStorage.setItem('slatina-player-clips', JSON.stringify(clips));
-    return newClip as PlayerClip;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('player_clips')
@@ -767,12 +643,7 @@ export async function createPlayerClip(clip: Omit<PlayerClip, 'id' | 'created_at
 }
 
 export async function deletePlayerClip(id: string): Promise<void> {
-  if (!isProductionMode()) {
-    const clips = JSON.parse(localStorage.getItem('slatina-player-clips') || '[]');
-    const filtered = clips.filter((c: PlayerClip) => c.id !== id);
-    localStorage.setItem('slatina-player-clips', JSON.stringify(clips));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('player_clips')
@@ -787,11 +658,7 @@ export async function deletePlayerClip(id: string): Promise<void> {
 // ============================================
 
 export async function getGoals(matchId?: string): Promise<Goal[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-goals');
-    const goals = data ? JSON.parse(data) : [];
-    return matchId ? goals.filter((g: Goal) => g.match_id === matchId) : goals;
-  }
+  if (!supabase) return [];
 
   let query = supabase.from('goals').select('*');
   if (matchId) {
@@ -804,13 +671,7 @@ export async function getGoals(matchId?: string): Promise<Goal[]> {
 }
 
 export async function createGoal(goal: Omit<Goal, 'id' | 'created_at'>): Promise<Goal> {
-  if (!isProductionMode()) {
-    const goals = JSON.parse(localStorage.getItem('slatina-goals') || '[]');
-    const newGoal = { ...goal, id: `goal-${Date.now()}`, created_at: new Date().toISOString() };
-    goals.push(newGoal);
-    localStorage.setItem('slatina-goals', JSON.stringify(goals));
-    return newGoal as Goal;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('goals')
@@ -822,16 +683,44 @@ export async function createGoal(goal: Omit<Goal, 'id' | 'created_at'>): Promise
   return data;
 }
 
+export async function getGoalsForPlayer(playerId: string): Promise<Goal[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('goals')
+    .select('*')
+    .eq('scorer_id', playerId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to get goals for player:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function getAssistsForPlayer(playerId: string): Promise<Goal[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('goals')
+    .select('*')
+    .eq('assist_id', playerId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to get assists for player:', error);
+    return [];
+  }
+  return data || [];
+}
+
 // ============================================
 // MATCH PLAYERS (Lineup/Roster)
 // ============================================
 
 export async function getMatchPlayers(matchId: string): Promise<MatchPlayer[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-match-players');
-    const players = data ? JSON.parse(data) : [];
-    return players.filter((p: MatchPlayer) => p.match_id === matchId);
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('match_players')
@@ -843,13 +732,7 @@ export async function getMatchPlayers(matchId: string): Promise<MatchPlayer[]> {
 }
 
 export async function addPlayerToMatch(matchPlayer: Omit<MatchPlayer, 'id' | 'created_at'>): Promise<MatchPlayer> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
-    const newPlayer = { ...matchPlayer, id: `mp-${Date.now()}`, created_at: new Date().toISOString() };
-    players.push(newPlayer);
-    localStorage.setItem('slatina-match-players', JSON.stringify(players));
-    return newPlayer as MatchPlayer;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('match_players')
@@ -862,12 +745,7 @@ export async function addPlayerToMatch(matchPlayer: Omit<MatchPlayer, 'id' | 'cr
 }
 
 export async function removePlayerFromMatch(matchId: string, playerId: string): Promise<void> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
-    const filtered = players.filter((p: MatchPlayer) => !(p.match_id === matchId && p.player_id === playerId));
-    localStorage.setItem('slatina-match-players', JSON.stringify(filtered));
-    return;
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { error } = await supabase
     .from('match_players')
@@ -879,14 +757,7 @@ export async function removePlayerFromMatch(matchId: string, playerId: string): 
 }
 
 export async function updateMatchPlayer(id: string, updates: Partial<MatchPlayer>): Promise<MatchPlayer | null> {
-  if (!isProductionMode()) {
-    const players = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
-    const index = players.findIndex((p: MatchPlayer) => p.id === id);
-    if (index === -1) return null;
-    players[index] = { ...players[index], ...updates };
-    localStorage.setItem('slatina-match-players', JSON.stringify(players));
-    return players[index];
-  }
+  if (!supabase) throw new Error('Supabase not available');
 
   const { data, error } = await supabase
     .from('match_players')
@@ -899,21 +770,9 @@ export async function updateMatchPlayer(id: string, updates: Partial<MatchPlayer
   return data;
 }
 
-/**
- * Get all matches where a player participated
- */
 export async function getMatchesForPlayer(playerId: string): Promise<Match[]> {
-  if (!isProductionMode()) {
-    const matchPlayers = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
-    const matchIds = matchPlayers
-      .filter((mp: MatchPlayer) => mp.player_id === playerId)
-      .map((mp: MatchPlayer) => mp.match_id);
+  if (!supabase) return [];
 
-    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
-    return matches.filter((m: Match) => matchIds.includes(m.id));
-  }
-
-  // First get all match_player entries for this player
   const { data: matchPlayerData, error: mpError } = await supabase
     .from('match_players')
     .select('match_id')
@@ -925,7 +784,6 @@ export async function getMatchesForPlayer(playerId: string): Promise<Match[]> {
 
   const matchIds = matchPlayerData.map(mp => mp.match_id);
 
-  // Then get the actual matches
   const { data: matchesData, error: matchError } = await supabase
     .from('matches')
     .select('*')
@@ -936,67 +794,261 @@ export async function getMatchesForPlayer(playerId: string): Promise<Match[]> {
   return matchesData || [];
 }
 
-// ============ VIDEO RATINGS (Hodnocení) ============
-
-export type RatingType = 'problem' | 'interesting' | 'praise';
-
-export interface VideoRating {
-  id: string;
-  video_id: string;
-  time: number;
-  type: RatingType;
-  player_id?: string;
-  player_name?: string;
-  note?: string;
-  created_at: string;
-}
+// ============================================
+// VIDEO RATINGS
+// ============================================
 
 export async function getRatings(videoId: string): Promise<VideoRating[]> {
-  // Local storage only for now
-  if (typeof window === 'undefined') return [];
-  const data = localStorage.getItem('slatina-video-ratings');
-  const ratings: VideoRating[] = data ? JSON.parse(data) : [];
-  return ratings.filter(r => r.video_id === videoId);
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('video_ratings')
+    .select('*')
+    .eq('video_id', videoId)
+    .order('time', { ascending: true });
+
+  if (error) {
+    console.error('Failed to get ratings:', error);
+    return [];
+  }
+  return data || [];
 }
 
 export async function getAllRatings(): Promise<VideoRating[]> {
-  if (typeof window === 'undefined') return [];
-  const data = localStorage.getItem('slatina-video-ratings');
-  return data ? JSON.parse(data) : [];
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('video_ratings')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to get all ratings:', error);
+    return [];
+  }
+  return data || [];
 }
 
 export async function createRating(rating: Omit<VideoRating, 'id' | 'created_at'>): Promise<VideoRating> {
-  const newRating: VideoRating = {
-    ...rating,
-    id: `rating-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    created_at: new Date().toISOString(),
-  };
+  if (!supabase) throw new Error('Supabase not available');
 
-  if (typeof window !== 'undefined') {
-    const ratings = JSON.parse(localStorage.getItem('slatina-video-ratings') || '[]');
-    ratings.push(newRating);
-    localStorage.setItem('slatina-video-ratings', JSON.stringify(ratings));
-  }
+  const { data, error } = await supabase
+    .from('video_ratings')
+    .insert(rating as any)
+    .select()
+    .single();
 
-  return newRating;
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteRating(id: string): Promise<void> {
-  if (typeof window !== 'undefined') {
-    const ratings = JSON.parse(localStorage.getItem('slatina-video-ratings') || '[]');
-    const filtered = ratings.filter((r: VideoRating) => r.id !== id);
-    localStorage.setItem('slatina-video-ratings', JSON.stringify(filtered));
-  }
+  if (!supabase) throw new Error('Supabase not available');
+
+  const { error } = await supabase
+    .from('video_ratings')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function getRatingsForPlayer(playerId: string): Promise<VideoRating[]> {
-  const ratings = await getAllRatings();
-  return ratings.filter(r => r.player_id === playerId);
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('video_ratings')
+    .select('*')
+    .eq('player_id', playerId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to get ratings for player:', error);
+    return [];
+  }
+  return data || [];
 }
 
 export async function getVideoIdsWithPlayerRating(playerId: string): Promise<string[]> {
   const ratings = await getRatingsForPlayer(playerId);
   return [...new Set(ratings.map(r => r.video_id))];
+}
+
+// ============================================
+// COACHES
+// ============================================
+
+export async function getCoaches(): Promise<Coach[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('coaches')
+    .select('*')
+    .eq('active', true)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Failed to get coaches:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function updateCoach(id: string, updates: Partial<Coach>): Promise<Coach | null> {
+  if (!supabase) throw new Error('Supabase not available');
+
+  const { data, error } = await supabase
+    .from('coaches')
+    .update(updates as any)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
+// TEAM CONFIG
+// ============================================
+
+export async function getTeamConfig(): Promise<TeamConfig | null> {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('team_config')
+    .select('*')
+    .limit(1)
+    .single();
+
+  if (error) {
+    console.error('Failed to get team config:', error);
+    return null;
+  }
+  return data;
+}
+
+export async function updateTeamConfig(updates: Partial<TeamConfig>): Promise<TeamConfig | null> {
+  if (!supabase) throw new Error('Supabase not available');
+
+  const existing = await getTeamConfig();
+  if (!existing) return null;
+
+  const { data, error } = await supabase
+    .from('team_config')
+    .update(updates as any)
+    .eq('id', existing.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
+// COACH COMMENTS (extended)
+// ============================================
+
+export async function getCoachComments(videoId?: string): Promise<CoachComment[]> {
+  if (!supabase) return [];
+
+  let query = supabase.from('coach_comments').select('*');
+  if (videoId) {
+    query = query.eq('video_id', videoId);
+  }
+
+  const { data, error } = await query.order('time', { ascending: true });
+  if (error) {
+    console.error('Failed to get coach comments:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function createCoachComment(comment: Omit<CoachComment, 'id' | 'created_at'>): Promise<CoachComment> {
+  if (!supabase) throw new Error('Supabase not available');
+
+  const { data, error } = await supabase
+    .from('coach_comments')
+    .insert(comment as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCoachComment(id: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not available');
+
+  const { error } = await supabase
+    .from('coach_comments')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+export async function getCoachCommentsForPlayer(playerId: string): Promise<CoachComment[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('coach_comments')
+    .select('*')
+    .contains('player_ids', [playerId])
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to get coach comments for player:', error);
+    return [];
+  }
+  return data || [];
+}
+
+// ============================================
+// AI FEEDBACK
+// ============================================
+
+export async function getAIFeedback(videoId?: string): Promise<AIFeedback[]> {
+  if (!supabase) return [];
+
+  let query = supabase.from('ai_feedback').select('*');
+  if (videoId) {
+    query = query.eq('video_id', videoId);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+  if (error) {
+    console.error('Failed to get AI feedback:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function createAIFeedback(feedback: Omit<AIFeedback, 'id' | 'created_at'>): Promise<AIFeedback> {
+  if (!supabase) throw new Error('Supabase not available');
+
+  const { data, error } = await supabase
+    .from('ai_feedback')
+    .insert(feedback as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getLearningStats(): Promise<{ total: number; correct: number; incorrect: number; accuracy: number }> {
+  const feedback = await getAIFeedback();
+  const correct = feedback.filter(f => f.is_correct).length;
+  const incorrect = feedback.filter(f => !f.is_correct).length;
+  const total = feedback.length;
+  return {
+    total,
+    correct,
+    incorrect,
+    accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+  };
 }
 
 // ============================================
@@ -1016,23 +1068,17 @@ export interface ExportData {
   ratings: VideoRating[];
 }
 
-/**
- * Export all data to JSON (for backup/transfer between devices)
- */
 export async function exportAllData(): Promise<ExportData> {
-  const [players, matches, videos, goals, playerPhotos, playerClips, ratings] = await Promise.all([
+  const [players, matches, videos, goals, playerPhotos, playerClips, comments, ratings] = await Promise.all([
     getPlayers(),
     getMatches(),
     getVideos(),
     getGoals(),
     getAllPlayerPhotos(),
     getAllPlayerClips(),
+    getAllComments(),
     getAllRatings(),
   ]);
-
-  // Comments need special handling - load all from localStorage
-  const commentsData = typeof window !== 'undefined' ? localStorage.getItem('slatina-comments') : null;
-  const comments = commentsData ? JSON.parse(commentsData) : [];
 
   return {
     version: 1,
@@ -1048,14 +1094,8 @@ export async function exportAllData(): Promise<ExportData> {
   };
 }
 
-/**
- * Get all player photos (not filtered by player)
- */
 async function getAllPlayerPhotos(): Promise<PlayerPhoto[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-player-photos');
-    return data ? JSON.parse(data) : [];
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('player_photos')
@@ -1066,14 +1106,8 @@ async function getAllPlayerPhotos(): Promise<PlayerPhoto[]> {
   return data || [];
 }
 
-/**
- * Get all player clips (not filtered by player)
- */
 async function getAllPlayerClips(): Promise<PlayerClip[]> {
-  if (!isProductionMode()) {
-    const data = localStorage.getItem('slatina-player-clips');
-    return data ? JSON.parse(data) : [];
-  }
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('player_clips')
@@ -1084,9 +1118,18 @@ async function getAllPlayerClips(): Promise<PlayerClip[]> {
   return data || [];
 }
 
-/**
- * Download export as JSON file
- */
+async function getAllComments(): Promise<Comment[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('comments')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
 export async function downloadExport(): Promise<void> {
   const data = await exportAllData();
   const json = JSON.stringify(data, null, 2);
@@ -1102,14 +1145,10 @@ export async function downloadExport(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Import data from JSON file (merges with existing data)
- */
 export async function importData(jsonData: ExportData): Promise<{ imported: number; skipped: number }> {
   let imported = 0;
   let skipped = 0;
 
-  // Import players
   if (jsonData.players?.length) {
     for (const player of jsonData.players) {
       try {
@@ -1121,11 +1160,11 @@ export async function importData(jsonData: ExportData): Promise<{ imported: numb
             position: player.position,
             photo_url: player.photo_url,
             intro_video_url: player.intro_video_url,
+            profile_background_url: player.profile_background_url || null,
             active: player.active,
           });
           imported++;
         } else {
-          // Update existing player with photo/video URLs if missing
           if (!existing.photo_url && player.photo_url) {
             await updatePlayer(player.id, { photo_url: player.photo_url });
             imported++;
@@ -1143,18 +1182,30 @@ export async function importData(jsonData: ExportData): Promise<{ imported: numb
     }
   }
 
-  // Import ratings to localStorage
   if (jsonData.ratings?.length) {
     const existingRatings = await getAllRatings();
     const existingIds = new Set(existingRatings.map(r => r.id));
-    const newRatings = jsonData.ratings.filter(r => !existingIds.has(r.id));
 
-    if (newRatings.length > 0) {
-      const allRatings = [...existingRatings, ...newRatings];
-      localStorage.setItem('slatina-video-ratings', JSON.stringify(allRatings));
-      imported += newRatings.length;
+    for (const rating of jsonData.ratings) {
+      if (!existingIds.has(rating.id)) {
+        try {
+          await createRating({
+            video_id: rating.video_id,
+            time: rating.time,
+            type: rating.type,
+            player_id: rating.player_id,
+            player_name: rating.player_name,
+            note: rating.note,
+          });
+          imported++;
+        } catch (err) {
+          console.error('Failed to import rating:', err);
+          skipped++;
+        }
+      } else {
+        skipped++;
+      }
     }
-    skipped += jsonData.ratings.length - newRatings.length;
   }
 
   return { imported, skipped };

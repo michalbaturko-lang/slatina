@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Loader2, RefreshCw, Check, X, AlertCircle } from 'lucide-react';
-import { getPlayers, Player } from '@/lib/team-store';
+import { getPlayers, Player } from '@/lib/cloud-store';
 import {
   detectPlayersFromVideoUrl,
-  getPlayersForVideo,
+  getPlayersForVideoAsync,
   savePlayersForVideo,
   setPlayersForVideoManually,
   DetectionResult,
@@ -31,21 +31,28 @@ export default function PlayerDetection({ videoId, videoUrl, onPlayersDetected }
 
   // Load existing detection and players
   useEffect(() => {
-    const players = getPlayers().filter(p => p.active);
-    setAllPlayers(players);
+    const loadData = async () => {
+      try {
+        const players = (await getPlayers()).filter(p => p.active);
+        setAllPlayers(players);
 
-    const existing = getPlayersForVideo(videoId);
-    if (existing) {
-      setHasExistingDetection(true);
-      setDetectedNumbers(existing.numbers);
-      setConfidence(existing.confidence || '');
-      const detected = existing.playerIds
-        .map(id => players.find(p => p.id === id))
-        .filter(Boolean) as Player[];
-      setDetectedPlayers(detected);
-      setSelectedPlayerIds(new Set(existing.playerIds));
-      onPlayersDetected?.(detected);
-    }
+        const existing = await getPlayersForVideoAsync(videoId);
+        if (existing) {
+          setHasExistingDetection(true);
+          setDetectedNumbers(existing.numbers);
+          setConfidence(existing.confidence || '');
+          const detected = existing.playerIds
+            .map(id => players.find(p => p.id === id))
+            .filter(Boolean) as Player[];
+          setDetectedPlayers(detected);
+          setSelectedPlayerIds(new Set(existing.playerIds));
+          onPlayersDetected?.(detected);
+        }
+      } catch (err) {
+        console.error('Failed to load detection data:', err);
+      }
+    };
+    loadData();
   }, [videoId, onPlayersDetected]);
 
   // Auto-detect on first load if no existing detection

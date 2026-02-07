@@ -35,9 +35,9 @@ import {
   Video,
   Player,
   MatchPlayer,
+  OPPONENT_TEAMS,
 } from '@/lib/cloud-store';
-import { OPPONENT_TEAMS, getPlayers as getLocalPlayers, Player as LocalPlayer } from '@/lib/team-store';
-import { getVideoPlayers, VideoPlayersData } from '@/lib/player-detection';
+import { getVideoPlayersAsync, VideoPlayersData } from '@/lib/player-detection';
 
 type ResultFilter = 'all' | 'win' | 'loss' | 'draw';
 
@@ -45,7 +45,6 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [localPlayers, setLocalPlayers] = useState<LocalPlayer[]>([]); // For detection matching
   const [matchPlayers, setMatchPlayers] = useState<Record<string, string[]>>({});
   const [videoPlayersData, setVideoPlayersData] = useState<VideoPlayersData>({});
   const [loading, setLoading] = useState(true);
@@ -85,11 +84,9 @@ export default function MatchesPage() {
         setVideos(videosData);
         setPlayers(playersData.filter(p => p.active));
 
-        // Load video player detections (from localStorage)
-        setVideoPlayersData(getVideoPlayers());
-
-        // Load local players for detection matching (detection uses team-store IDs)
-        setLocalPlayers(getLocalPlayers().filter(p => p.active));
+        // Load video player detections from Supabase
+        const detectionsData = await getVideoPlayersAsync();
+        setVideoPlayersData(detectionsData);
 
         // Load match-player associations for all matches from cloud
         const matchPlayerMap: Record<string, string[]> = {};
@@ -161,13 +158,12 @@ export default function MatchesPage() {
     return videos.filter(v => v.match_id === matchId);
   };
 
-  // Get detected players for a video
-  // Uses localPlayers because detection saves IDs from team-store (localStorage)
+  // Get detected players for a video from Supabase video_detections
   const getVideoDetectedPlayers = (videoId: string) => {
     const detection = videoPlayersData[videoId];
     if (!detection) return null; // No detection yet
     const detectedPlayerIds = detection.playerIds || [];
-    return localPlayers.filter(p => detectedPlayerIds.includes(p.id));
+    return players.filter(p => detectedPlayerIds.includes(p.id));
   };
 
   // Get videos without a match (orphaned)

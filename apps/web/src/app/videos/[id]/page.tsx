@@ -56,11 +56,12 @@ import {
   Match,
   VideoRating,
   RatingType,
+  getPlayers,
+  Player,
 } from '@/lib/cloud-store';
-import { getPlayers, Player, addPlayerClip as addPlayerClipLocal } from '@/lib/team-store';
 import { uploadFile, uploadDataUrl } from '@/lib/upload';
 import PlayerDetection from '@/components/PlayerDetection';
-import { getVideoPlayers, VideoPlayersData } from '@/lib/player-detection';
+import { getVideoPlayersAsync, VideoPlayersData } from '@/lib/player-detection';
 
 type ToolType = 'select' | 'pencil' | 'arrow' | 'circle' | 'rectangle' | 'playerMarker';
 
@@ -259,8 +260,8 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           getVideos(),
         ]);
 
-        // Get players from team-store (localStorage with defaults)
-        const playersData = getPlayers();
+        // Get players from Supabase
+        const playersData = await getPlayers();
 
         setScreenshots(screenshotsData);
         setAudioComments(audioData);
@@ -301,8 +302,9 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
           }
         }
 
-        // Load video players data for all videos (for showing player badges in thumbnails)
-        setAllVideoPlayers(getVideoPlayers());
+        // Load video players data for all videos from Supabase (for showing player badges in thumbnails)
+        const videoPlayersData = await getVideoPlayersAsync();
+        setAllVideoPlayers(videoPlayersData);
 
         setLoading(false);
       } catch (err) {
@@ -934,12 +936,12 @@ export default function VideoDetailPage({ params }: { params: { id: string } }) 
       return;
     }
     try {
-      // Save to local team-store
-      addPlayerClipLocal({
-        playerId: clipPlayer.id,
-        videoId: video.id,
-        startTime: clipStart,
-        endTime: clipEnd,
+      // Save to Supabase
+      await createPlayerClip({
+        player_id: clipPlayer.id,
+        video_id: video.id,
+        start_time: clipStart,
+        end_time: clipEnd,
         title: clipTitle || `Klip ${formatTime(clipStart)}-${formatTime(clipEnd)}`,
         category: clipCategory,
       });

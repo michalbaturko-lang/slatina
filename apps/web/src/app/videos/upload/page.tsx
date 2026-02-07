@@ -15,9 +15,8 @@ import {
   Plus,
   FileVideo,
 } from 'lucide-react';
-import { createVideo, createMatch, createComment } from '@/lib/cloud-store';
+import { createVideo, createMatch, createComment, getTeamConfig, getCoaches, OPPONENT_TEAMS, DEFAULT_COACHES } from '@/lib/cloud-store';
 import { uploadFile } from '@/lib/upload';
-import { getTeam, COACHES, OPPONENT_TEAMS } from '@/lib/team-store';
 
 interface FileQueueItem {
   id: string;
@@ -54,7 +53,26 @@ export default function UploadPage() {
   const TOURNAMENTS = ['Vinohrady', 'Žabčice', 'Křenovice', 'Tuřany'];
 
   // Team info
-  const team = typeof window !== 'undefined' ? getTeam() : null;
+  const [teamName, setTeamName] = useState('SK Slatina 2017');
+  const [coachNames, setCoachNames] = useState(DEFAULT_COACHES.map(c => c.name).join(', '));
+
+  // Load team config on mount
+  useEffect(() => {
+    const loadTeamInfo = async () => {
+      try {
+        const config = await getTeamConfig();
+        if (config?.name) setTeamName(config.name);
+
+        const coaches = await getCoaches();
+        if (coaches.length > 0) {
+          setCoachNames(coaches.map(c => c.name).join(', '));
+        }
+      } catch (err) {
+        console.error('Failed to load team info:', err);
+      }
+    };
+    loadTeamInfo();
+  }, []);
 
   // Generate title for a video based on opponent and index
   const generateTitle = (index: number, total: number) => {
@@ -335,9 +353,9 @@ export default function UploadPage() {
             className="rounded-lg"
           />
           <div>
-            <p className="font-semibold text-blue-300">{team?.name || 'SK Slatina 2017'}</p>
+            <p className="font-semibold text-blue-300">{teamName}</p>
             <p className="text-sm text-blue-400/70">
-              Trenéři: {COACHES.map(c => c.name).join(', ')}
+              Trenéři: {coachNames}
             </p>
           </div>
         </div>

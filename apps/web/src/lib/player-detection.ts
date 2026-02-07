@@ -1,8 +1,10 @@
 /**
  * Player Detection - Automatic detection of jersey numbers from video frames
+ * Uses Supabase video_detections table for persistent storage
  */
 
-import { getPlayers, Player } from './team-store';
+import { supabase, isProductionMode } from './supabase';
+import { getPlayers, Player } from './cloud-store';
 
 export interface DetectionResult {
   numbers: number[];
@@ -152,7 +154,7 @@ export async function detectPlayersFromFrames(
       const data = await response.json();
 
       // Match detected numbers to players
-      const allPlayers = getPlayers();
+      const allPlayers = await getPlayers();
       const detectedPlayers = data.numbers
         .map((num: number) => allPlayers.find(p => p.number === num))
         .filter(Boolean) as Player[];
@@ -221,9 +223,18 @@ export async function detectPlayersFromVideoUrl(
 }
 
 /**
- * Storage key for detected players on videos
+ * Video detection data structure
  */
-const VIDEO_PLAYERS_KEY = 'slatina-video-players';
+export interface VideoDetection {
+  id: string;
+  video_id: string;
+  player_ids: string[];
+  numbers: number[];
+  confidence: 'high' | 'medium' | 'low';
+  manual: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface VideoPlayersData {
   [videoId: string]: {
@@ -231,62 +242,132 @@ export interface VideoPlayersData {
     numbers: number[];
     confidence: 'high' | 'medium' | 'low';
     detectedAt: number;
-    manual?: boolean; // true if manually edited
+    manual?: boolean;
   };
 }
 
+// Local cache for video detections
+let detectionsCache: VideoPlayersData | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 30000; // 30 seconds
+
 /**
- * Get all video-player associations
- * Re-maps playerIds from jersey numbers to ensure they match current roster
+ * Get all video-player associations from Supabase
  */
-export function getVideoPlayers(): VideoPlayersData {
-  if (typeof window === 'undefined') return {};
-  const data = localStorage.getItem(VIDEO_PLAYERS_KEY);
-  if (!data) return {};
+export async function getVideoPlayersAsync(): Promise<VideoPlayersData> {
+  if (!isProductionMode() || !supabase) {
+    return {};
+  }
 
-  const parsed: VideoPlayersData = JSON.parse(data);
-  const allPlayers = getPlayers();
+  // Use cache if fresh
+  if (detectionsCache && Date.now() - cacheTimestamp < CACHE_TTL) {
+    return detectionsCache;
+  }
 
-  // Re-derive playerIds from numbers to match current roster IDs
-  let changed = false;
-  for (const videoId of Object.keys(parsed)) {
-    const entry = parsed[videoId];
-    if (!entry.numbers || entry.numbers.length === 0) continue;
+  try {
+    const { data, error } = await supabase
+      .from('video_detections')
+      .select('*');
 
-    const correctIds = entry.numbers
-      .map(num => allPlayers.find(p => p.number === num))
-      .filter(Boolean)
-      .map(p => p!.id);
+    if (error) throw error;
 
-    // Check if IDs need updating
-    const currentIds = entry.playerIds || [];
-    if (correctIds.length > 0 && (
-      correctIds.length !== currentIds.length ||
-      correctIds.some(id => !currentIds.includes(id))
-    )) {
-      parsed[videoId] = { ...entry, playerIds: correctIds };
-      changed = true;
+    const result: VideoPlayersData = {};
+    const allPlayers = await getPlayers();
+
+    interface DetectionRow {
+      video_id: string;
+      numbers: number[] | null;
+      player_ids: string[] | null;
+      confidence: 'high' | 'medium' | 'low' | null;
+      manual: boolean | null;
+      created_at: string;
     }
-  }
 
-  if (changed) {
-    localStorage.setItem(VIDEO_PLAYERS_KEY, JSON.stringify(parsed));
-  }
+    for (const detection of (data as DetectionRow[]) || []) {
+      // Re-derive playerIds from numbers to match current roster
+      const correctIds = (detection.numbers || [])
+        .map((num: number) => allPlayers.find(p => p.number === num))
+        .filter((p): p is Player => p !== undefined)
+        .map(p => p.id);
 
-  return parsed;
+      result[detection.video_id] = {
+        playerIds: correctIds.length > 0 ? correctIds : (detection.player_ids || []),
+        numbers: detection.numbers || [],
+        confidence: detection.confidence || 'medium',
+        detectedAt: new Date(detection.created_at).getTime(),
+        manual: detection.manual || false,
+      };
+    }
+
+    detectionsCache = result;
+    cacheTimestamp = Date.now();
+    return result;
+  } catch (err) {
+    console.error('Failed to load video detections:', err);
+    return detectionsCache || {};
+  }
 }
 
 /**
- * Save video-player associations
+ * Synchronous version for backward compatibility (uses cache)
  */
-export function saveVideoPlayers(data: VideoPlayersData): void {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(VIDEO_PLAYERS_KEY, JSON.stringify(data));
-  }
+export function getVideoPlayers(): VideoPlayersData {
+  return detectionsCache || {};
+}
+
+/**
+ * Invalidate cache to force reload
+ */
+export function invalidateDetectionsCache(): void {
+  detectionsCache = null;
+  cacheTimestamp = 0;
 }
 
 /**
  * Get players for a specific video
+ */
+export async function getPlayersForVideoAsync(videoId: string): Promise<{ playerIds: string[]; numbers: number[]; confidence?: string; manual?: boolean } | null> {
+  if (!isProductionMode() || !supabase) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('video_detections')
+      .select('*')
+      .eq('video_id', videoId)
+      .single();
+
+    if (error || !data) return null;
+
+    interface DetectionRow {
+      numbers: number[] | null;
+      player_ids: string[] | null;
+      confidence: 'high' | 'medium' | 'low' | null;
+      manual: boolean | null;
+    }
+    const detection = data as DetectionRow;
+
+    const allPlayers = await getPlayers();
+    const correctIds = (detection.numbers || [])
+      .map((num: number) => allPlayers.find(p => p.number === num))
+      .filter((p): p is Player => p !== undefined)
+      .map(p => p.id);
+
+    return {
+      playerIds: correctIds.length > 0 ? correctIds : (detection.player_ids || []),
+      numbers: detection.numbers || [],
+      confidence: detection.confidence || undefined,
+      manual: detection.manual || undefined,
+    };
+  } catch (err) {
+    console.error('Failed to get video detection:', err);
+    return null;
+  }
+}
+
+/**
+ * Synchronous version for backward compatibility
  */
 export function getPlayersForVideo(videoId: string): { playerIds: string[]; numbers: number[]; confidence?: string; manual?: boolean } | null {
   const data = getVideoPlayers();
@@ -294,73 +375,125 @@ export function getPlayersForVideo(videoId: string): { playerIds: string[]; numb
 }
 
 /**
- * Save detected players for a video
+ * Save detected players for a video to Supabase
  */
-export function savePlayersForVideo(
+export async function savePlayersForVideo(
   videoId: string,
   result: DetectionResult,
   manual: boolean = false
-): void {
-  const data = getVideoPlayers();
-  data[videoId] = {
-    playerIds: result.players.map(p => p.id),
-    numbers: result.numbers,
-    confidence: result.confidence,
-    detectedAt: result.detectedAt,
-    manual,
-  };
-  saveVideoPlayers(data);
+): Promise<void> {
+  if (!isProductionMode() || !supabase) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('video_detections')
+      .upsert({
+        video_id: videoId,
+        player_ids: result.players.map(p => p.id),
+        numbers: result.numbers,
+        confidence: result.confidence,
+        manual,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'video_id',
+      });
+
+    if (error) throw error;
+
+    // Update local cache
+    if (detectionsCache) {
+      detectionsCache[videoId] = {
+        playerIds: result.players.map(p => p.id),
+        numbers: result.numbers,
+        confidence: result.confidence,
+        detectedAt: result.detectedAt,
+        manual,
+      };
+    }
+  } catch (err) {
+    console.error('Failed to save video detection:', err);
+    throw err;
+  }
 }
 
 /**
  * Manually set players for a video
  */
-export function setPlayersForVideoManually(videoId: string, playerIds: string[]): void {
-  const allPlayers = getPlayers();
+export async function setPlayersForVideoManually(videoId: string, playerIds: string[]): Promise<void> {
+  const allPlayers = await getPlayers();
   const selectedPlayers = playerIds
     .map(id => allPlayers.find(p => p.id === id))
     .filter(Boolean) as Player[];
 
   const numbers = selectedPlayers
     .map(p => p.number)
-    .filter((n): n is number => n !== undefined);
+    .filter((n): n is number => n !== undefined && n !== null);
 
-  const data = getVideoPlayers();
-  data[videoId] = {
-    playerIds,
+  const result: DetectionResult = {
     numbers,
     confidence: 'high',
+    players: selectedPlayers,
     detectedAt: Date.now(),
-    manual: true,
   };
-  saveVideoPlayers(data);
+
+  await savePlayersForVideo(videoId, result, true);
 }
 
 /**
  * Remove player detection data for a video
  */
-export function removePlayersForVideo(videoId: string): void {
-  const data = getVideoPlayers();
-  delete data[videoId];
-  saveVideoPlayers(data);
+export async function removePlayersForVideo(videoId: string): Promise<void> {
+  if (!isProductionMode() || !supabase) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('video_detections')
+      .delete()
+      .eq('video_id', videoId);
+
+    if (error) throw error;
+
+    // Update local cache
+    if (detectionsCache) {
+      delete detectionsCache[videoId];
+    }
+  } catch (err) {
+    console.error('Failed to remove video detection:', err);
+    throw err;
+  }
 }
 
 /**
- * Get videos that have a specific player
+ * Get videos that have a specific player (by jersey number)
  */
-export function getVideoIdsWithPlayer(playerId: string): string[] {
-  const data = getVideoPlayers();
-  return Object.entries(data)
-    .filter(([, value]) => value.playerIds.includes(playerId))
-    .map(([videoId]) => videoId);
+export async function getVideoIdsWithPlayer(playerNumber: number): Promise<string[]> {
+  if (!isProductionMode() || !supabase) {
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('video_detections')
+      .select('video_id, numbers');
+
+    if (error) throw error;
+
+    return (data || [])
+      .filter(d => d.numbers?.includes(playerNumber))
+      .map(d => d.video_id);
+  } catch (err) {
+    console.error('Failed to get videos with player:', err);
+    return [];
+  }
 }
 
 /**
  * Get videos that have a specific jersey number
  */
-export function getVideoIdsWithNumber(number: number): string[] {
-  const data = getVideoPlayers();
-  return Object.entries(data)
-    .filter(([, value]) => value.numbers.includes(number))
-    .map(([videoId]) => videoId);
+export async function getVideoIdsWithNumber(number: number): Promise<string[]> {
+  return getVideoIdsWithPlayer(number);
 }
