@@ -68,6 +68,14 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
   const [uploadingIntroVideo, setUploadingIntroVideo] = useState(false);
   const introVideoInputRef = useRef<HTMLInputElement>(null);
 
+  // Section refs for scrolling
+  const videosSectionRef = useRef<HTMLDivElement>(null);
+  const matchesSectionRef = useRef<HTMLDivElement>(null);
+  const commentsSectionRef = useRef<HTMLDivElement>(null);
+
+  // Comments expanded state
+  const [showAllComments, setShowAllComments] = useState(false);
+
   useEffect(() => {
     loadPlayerData();
   }, [params.id]);
@@ -481,35 +489,53 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
           </div>
 
           {/* Stats Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 16,
-            width: '100%',
-            marginTop: 8,
-          }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#fbbf24' }}>{matches.length}</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Zápasů</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#22c55e' }}>{goals}</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Gólů</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#60a5fa' }}>{assists}</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Asistencí</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: '#a855f7' }}>{comments.length}</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Komentářů</div>
-            </div>
-          </div>
+          {(() => {
+            // Calculate unique matches from videos where player was detected
+            const uniqueMatchIds = new Set(
+              playerVideos
+                .filter(v => v.match_id)
+                .map(v => v.match_id)
+            );
+            const matchesCount = uniqueMatchIds.size;
+
+            return (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 16,
+                width: '100%',
+                marginTop: 8,
+              }}>
+                <div
+                  onClick={() => videosSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  style={{ textAlign: 'center', cursor: matchesCount > 0 ? 'pointer' : 'default' }}
+                >
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#fbbf24' }}>{matchesCount}</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Zápasů</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#22c55e' }}>{goals}</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Gólů</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#60a5fa' }}>{assists}</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Asistencí</div>
+                </div>
+                <div
+                  onClick={() => comments.length > 0 && commentsSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                  style={{ textAlign: 'center', cursor: comments.length > 0 ? 'pointer' : 'default' }}
+                >
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#a855f7' }}>{comments.length}</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Komentářů</div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Videos Section */}
         {playerVideos.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
+          <div ref={videosSectionRef} style={{ marginBottom: 24 }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -636,7 +662,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
         {/* Matches Section */}
         {matches.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
+          <div ref={matchesSectionRef} style={{ marginBottom: 24 }}>
             <h3 style={{
               fontSize: 16,
               fontWeight: 600,
@@ -686,20 +712,42 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
         {/* Comments Section */}
         {comments.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{
-              fontSize: 16,
-              fontWeight: 600,
-              marginBottom: 12,
+          <div ref={commentsSectionRef} style={{ marginBottom: 24 }}>
+            <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              justifyContent: 'space-between',
+              marginBottom: 12,
             }}>
-              <MessageSquare size={18} style={{ color: '#a855f7' }} />
-              Komentáře ({comments.length})
-            </h3>
+              <h3 style={{
+                fontSize: 16,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                <MessageSquare size={18} style={{ color: '#a855f7' }} />
+                Komentáře ({comments.length})
+              </h3>
+              {comments.length > 5 && (
+                <button
+                  onClick={() => setShowAllComments(!showAllComments)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    borderRadius: 6,
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: '#374151',
+                    color: 'white',
+                  }}
+                >
+                  {showAllComments ? 'Zobrazit méně' : `Zobrazit všechny (${comments.length})`}
+                </button>
+              )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {comments.slice(0, 5).map(comment => (
+              {(showAllComments ? comments : comments.slice(0, 5)).map(comment => (
                 <Link
                   key={comment.id}
                   href={`/videos/${comment.videoId}?t=${Math.floor(comment.time)}`}
