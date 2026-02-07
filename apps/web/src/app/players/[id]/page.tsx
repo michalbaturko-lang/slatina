@@ -19,11 +19,9 @@ import {
 } from 'lucide-react';
 import {
   getCommentsForPlayer,
-  getMatchesForPlayer,
   getGoalsForPlayer,
   getAssistsForPlayer,
   CoachComment,
-  Match,
 } from '@/lib/team-store';
 import { getVideoIdsWithPlayer } from '@/lib/player-detection';
 import {
@@ -37,6 +35,7 @@ import {
   getRatingsForPlayer,
   VideoRating,
   getMatches as getMatchesCloud,
+  getMatchesForPlayer,
   Match as MatchCloud,
 } from '@/lib/cloud-store';
 import { uploadDataUrl, uploadFile } from '@/lib/upload';
@@ -48,7 +47,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
   // Stats
   const [comments, setComments] = useState<CoachComment[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
+  const [matches, setMatches] = useState<MatchCloud[]>([]);
   const [goals, setGoals] = useState<number>(0);
   const [assists, setAssists] = useState<number>(0);
 
@@ -86,16 +85,18 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
 
       setPlayer(foundPlayer);
 
-      // Load related data
+      // Load related data (comments, goals, assists from localStorage)
       const playerComments = getCommentsForPlayer(params.id);
-      const playerMatches = getMatchesForPlayer(params.id);
       const playerGoals = getGoalsForPlayer(params.id);
       const playerAssists = getAssistsForPlayer(params.id);
 
       setComments(playerComments);
-      setMatches(playerMatches);
       setGoals(playerGoals.length);
       setAssists(playerAssists.length);
+
+      // Load matches from Supabase (match_players table)
+      const playerMatches = await getMatchesForPlayer(params.id);
+      setMatches(playerMatches);
 
       // Load videos where player was detected (by jersey number) or rated (Hodnocení)
       const detectedVideoIds = getVideoIdsWithPlayer(params.id);
@@ -258,7 +259,6 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
             overflow: 'hidden',
             marginBottom: 16,
             backgroundColor: '#000',
-            maxHeight: 500,
           }}>
             <video
               ref={introVideoRef}
@@ -269,8 +269,8 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
               playsInline
               style={{
                 width: '100%',
-                maxHeight: 500,
-                objectFit: 'cover',
+                maxHeight: '70vh',
+                objectFit: 'contain',
                 display: 'block',
               }}
             />
@@ -668,14 +668,14 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
                     <div style={{ fontWeight: 500, fontSize: 14 }}>{match.name}</div>
                     <div style={{ fontSize: 12, color: '#9ca3af' }}>{match.date}</div>
                   </div>
-                  {match.result && (
+                  {(match.goals_for !== undefined && match.goals_against !== undefined) && (
                     <div style={{
                       fontSize: 16,
                       fontWeight: 700,
-                      color: match.result.goalsFor > match.result.goalsAgainst ? '#22c55e' :
-                             match.result.goalsFor < match.result.goalsAgainst ? '#ef4444' : '#fbbf24',
+                      color: match.goals_for > match.goals_against ? '#22c55e' :
+                             match.goals_for < match.goals_against ? '#ef4444' : '#fbbf24',
                     }}>
-                      {match.result.goalsFor}:{match.result.goalsAgainst}
+                      {match.goals_for}:{match.goals_against}
                     </div>
                   )}
                 </Link>

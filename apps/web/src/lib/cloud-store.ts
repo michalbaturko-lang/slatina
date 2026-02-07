@@ -899,6 +899,43 @@ export async function updateMatchPlayer(id: string, updates: Partial<MatchPlayer
   return data;
 }
 
+/**
+ * Get all matches where a player participated
+ */
+export async function getMatchesForPlayer(playerId: string): Promise<Match[]> {
+  if (!isProductionMode()) {
+    const matchPlayers = JSON.parse(localStorage.getItem('slatina-match-players') || '[]');
+    const matchIds = matchPlayers
+      .filter((mp: MatchPlayer) => mp.player_id === playerId)
+      .map((mp: MatchPlayer) => mp.match_id);
+
+    const matches = JSON.parse(localStorage.getItem('slatina-matches') || '[]');
+    return matches.filter((m: Match) => matchIds.includes(m.id));
+  }
+
+  // First get all match_player entries for this player
+  const { data: matchPlayerData, error: mpError } = await supabase
+    .from('match_players')
+    .select('match_id')
+    .eq('player_id', playerId);
+
+  if (mpError || !matchPlayerData || matchPlayerData.length === 0) {
+    return [];
+  }
+
+  const matchIds = matchPlayerData.map(mp => mp.match_id);
+
+  // Then get the actual matches
+  const { data: matchesData, error: matchError } = await supabase
+    .from('matches')
+    .select('*')
+    .in('id', matchIds)
+    .order('date', { ascending: false });
+
+  if (matchError) throw matchError;
+  return matchesData || [];
+}
+
 // ============ VIDEO RATINGS (Hodnocení) ============
 
 export type RatingType = 'problem' | 'interesting' | 'praise';
