@@ -322,6 +322,38 @@ export interface Database {
           created_at?: string;
         };
       };
+      video_detections: {
+        Row: {
+          id: string;
+          video_id: string;
+          player_ids: string[];
+          numbers: number[];
+          confidence: 'high' | 'medium' | 'low';
+          manual: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          video_id: string;
+          player_ids: string[];
+          numbers: number[];
+          confidence: 'high' | 'medium' | 'low';
+          manual?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          video_id?: string;
+          player_ids?: string[];
+          numbers?: number[];
+          confidence?: 'high' | 'medium' | 'low';
+          manual?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }

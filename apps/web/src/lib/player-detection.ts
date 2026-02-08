@@ -265,8 +265,8 @@ export async function getVideoPlayersAsync(): Promise<VideoPlayersData> {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('video_detections')
+    const { data, error } = await (supabase
+      .from('video_detections') as any)
       .select('*');
 
     if (error) throw error;
@@ -332,8 +332,8 @@ export async function getPlayersForVideoAsync(videoId: string): Promise<{ player
   }
 
   try {
-    const { data, error } = await supabase
-      .from('video_detections')
+    const { data, error } = await (supabase
+      .from('video_detections') as any)
       .select('*')
       .eq('video_id', videoId)
       .single();
@@ -387,8 +387,8 @@ export async function savePlayersForVideo(
   }
 
   try {
-    const { error } = await supabase
-      .from('video_detections')
+    const { error } = await (supabase
+      .from('video_detections') as any)
       .upsert({
         video_id: videoId,
         player_ids: result.players.map(p => p.id),
@@ -450,8 +450,8 @@ export async function removePlayersForVideo(videoId: string): Promise<void> {
   }
 
   try {
-    const { error } = await supabase
-      .from('video_detections')
+    const { error } = await (supabase
+      .from('video_detections') as any)
       .delete()
       .eq('video_id', videoId);
 
@@ -476,15 +476,15 @@ export async function getVideoIdsWithPlayer(playerNumber: number): Promise<strin
   }
 
   try {
-    const { data, error } = await supabase
-      .from('video_detections')
+    const { data, error } = await (supabase
+      .from('video_detections') as any)
       .select('video_id, numbers');
 
     if (error) throw error;
 
     return (data || [])
-      .filter(d => d.numbers?.includes(playerNumber))
-      .map(d => d.video_id);
+      .filter((d: { video_id: string; numbers: number[] | null }) => d.numbers?.includes(playerNumber))
+      .map((d: { video_id: string; numbers: number[] | null }) => d.video_id);
   } catch (err) {
     console.error('Failed to get videos with player:', err);
     return [];
