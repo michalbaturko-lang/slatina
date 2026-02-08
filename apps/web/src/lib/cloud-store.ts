@@ -128,6 +128,11 @@ export const OPPONENT_TEAMS = [
   { id: 'rafk', name: 'RAFK' },
   { id: 'vyskov', name: 'Vyškov' },
   { id: 'chrlice', name: 'Chrlice' },
+  { id: 'velke-nemcice-a', name: 'Velké Němčice A' },
+  { id: 'velke-nemcice-b', name: 'Velké Němčice B' },
+  { id: 'cezava', name: 'Cézava' },
+  { id: 'boretice', name: 'Bořetice' },
+  { id: 'pohorelice', name: 'Pohořelice' },
 ];
 
 export const DEFAULT_COACHES = [
