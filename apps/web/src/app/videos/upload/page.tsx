@@ -50,7 +50,7 @@ export default function UploadPage() {
   const [matchComment, setMatchComment] = useState('');
 
   // Tournament options
-  const TOURNAMENTS = ['Vinohrady', 'Žabčice', 'Křenovice', 'Tuřany'];
+  const TOURNAMENTS = ['Vinohrady', 'Žabčice', 'Křenovice', 'Tuřany', 'Velké Němčice'];
 
   // Team info
   const [teamName, setTeamName] = useState('SK Slatina 2017');
